@@ -71,6 +71,7 @@ class quiz_export_report extends quiz_attempts_report {
         // print moodle headers (header, navigation, etc.)
         $this->print_header_and_tabs($cm, $course, $quiz, $this->mode);
 
+        // no idea what this operated
         if ($groupmode = groups_get_activity_groupmode($cm)) {
             // Groups are being used, so output the group selector
             groups_print_activity_menu($cm, $options->get_url());
@@ -99,7 +100,7 @@ class quiz_export_report extends quiz_attempts_report {
             $headers = array();
             $this->add_user_columns($table, $columns, $headers);
             // $this->add_state_column($columns, $headers);
-            // $this->add_time_columns($columns, $headers);
+            $this->add_time_columns($columns, $headers);
 
             // Set up the table.
             $this->set_up_table_columns($table, $columns, $headers, $this->get_base_url(), $options, false);

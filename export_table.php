@@ -37,7 +37,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_table.php');
 class quiz_export_table extends quiz_attempts_report_table {
 	public function build_table() {
 		// strange: parent class quiz_attempts_report_table uses this property but doesn't define it
-		// so we have to do it here...
+		// so we have to do it here... just for quiz_attempts_report::add_time_columns
         $this->strtimeformat = str_replace(',', ' ', get_string('strftimedatetime'));
         parent::build_table();
     }
