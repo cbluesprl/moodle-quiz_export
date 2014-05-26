@@ -16,6 +16,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_table.php');
+require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 /**
  * Quiz report subclass for the export report.
@@ -59,6 +60,9 @@ class quiz_export_report extends quiz_attempts_report {
         // $PAGE->set_pagelayout('embedded');
         // just breadcrump bar and title
         // $PAGE->set_pagelayout('print');
+        
+        // process actions
+        $this->process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $options->get_url());
 
         // Start output.
 
@@ -145,6 +149,38 @@ class quiz_export_report extends quiz_attempts_report {
      *      Empty means all users.
      */
     protected function export_attempts($quiz, $cm, $attemptids, $allowed) {
-        // 
+        global $DB;
+
+        $pdf_files = array();
+        $exporter = new quiz_export_engine();
+
+        $tmp_dir = sys_get_temp_dir();
+        $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
+        $tmp_zip_file = $tmp_file .".zip";
+        rename($tmp_file, $tmp_zip_file);
+        chmod($tmp_zip_file, 0644);
+
+        $zip = new ZipArchive;
+        $zip->open($tmp_zip_file);
+
+        foreach ($attemptids as $attemptid) {
+            $attemptobj = quiz_attempt::create($attemptid);
+            $pdf_file = $exporter->a2pdf($attemptobj, 0);
+            $pdf_files[] = $pdf_file;
+            $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
+            $zip->addFile($pdf_file, fullname($student, true) ."_". $attemptid.'.pdf');
+        }
+        $zip->close();
+
+        header("Content-Type: application/zip");
+        header("Content-Disposition: attachment; filename=\"quiz_export.zip\"");
+        readfile($tmp_zip_file);
+
+        // cleanup
+        foreach ($pdf_files as $pdf_file) {
+            unlink($pdf_file);
+        }
+        unset($zip);
+        unlink($tmp_zip_file);
     }
 }
