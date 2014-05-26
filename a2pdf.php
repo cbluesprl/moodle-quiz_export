@@ -1,5 +1,13 @@
 <?php
 
+/**
+ * This file downloads a single quiz attempt.
+ *
+ * @package   quiz_export
+ * @copyright 2014 Johannes Burk
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 require_once(dirname(__FILE__) . '/../../../../config.php');
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');

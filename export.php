@@ -1,5 +1,21 @@
 <?php
 
+/**
+ * This file defines the export engine class.
+ *
+ * @package   quiz_export
+ * @copyright 2014 Johannes Burk
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+require_once(dirname(__FILE__) . '/../../../../config.php');
+
+/**
+ * Quiz export engine class.
+ *
+ * @copyright 2014 Johannes Burk
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class quiz_export_engine {
 
 	public function a2pdf($attemptobj, $pagemode) {

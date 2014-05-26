@@ -24,7 +24,6 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  * @copyright 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-// class quiz_export_report extends quiz_default_report {
 class quiz_export_report extends quiz_attempts_report {
 
     public function display($quiz, $cm, $course) {
