@@ -10,8 +10,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version  = 2014052600;
+$plugin->version  = 2014060200;
 $plugin->requires = 2013051405;
 $plugin->maturity = MATURITY_BETA;
-$plugin->release = '0.1.0 Beta 1 (Build 2014052600)';
+$plugin->release = '0.2.0 Beta 1 (Build 2014060200)';
 $plugin->component = 'quiz_export';
