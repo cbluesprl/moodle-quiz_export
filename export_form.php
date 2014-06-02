@@ -21,4 +21,16 @@ require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_form.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class quiz_export_settings_form extends mod_quiz_attempts_report_form {
+	
+	protected function other_preference_fields(MoodleQuickForm $mform) {
+
+		$mform->addElement('header', 'exportsettings',
+			get_string('exportsettings', 'quiz_export'));
+
+		$mform->addElement('select', 'pagemode', get_string('pagemode', 'quiz_export'), array(
+				quiz_export_engine::PAGEMODE_TRUEPAGE 			=> get_string('exportmodetruepage', 'quiz_export'),
+				quiz_export_engine::PAGEMODE_QUESTIONPERPAGE	=> get_string('exportmodequestionperpage', 'quiz_export'),
+				quiz_export_engine::PAGEMODE_SINGLEPAGE			=> get_string('exportmodesinglepage', 'quiz_export'),
+			));
+	}
 }

@@ -22,28 +22,43 @@ require_once(dirname(__FILE__) . '/../../../../config.php');
  */
 class quiz_export_engine {
 
+	private $wkhtmltopdf = "wkhtmltopdf";
+
+	/**
+	 * Actual question page assignment like in quiz settings.
+	 */
+	const PAGEMODE_TRUEPAGE = 0;
+
+	/**
+	 * One question per page.
+	 */
+	const PAGEMODE_QUESTIONPERPAGE = 1;
+
+	/**
+	 * all questions on single page.
+	 */
+	const PAGEMODE_SINGLEPAGE = 2;
+
+	/**
+	 * Exports the given quiz attempt to a pdf file.
+	 * @param  quiz_attempt $attemptobj The quiz attempt to export.
+	 * @param  int $pagemode   The page break mode used to render the quiz review.
+	 *                         One of PAGEMODE_TRUEPAGE, PAGEMODE_QUESTIONPERPAGE or PAGEMODE_SINGLEPAGE
+	 * @return file_path       File path and name as string of the pdf file.
+	 */
 	public function a2pdf($attemptobj, $pagemode) {
-		// pagemode 0: question per page
-		// pagemode 1: questions related to a page per page
-		// pagemode 2: all questions on single page
 		switch ($pagemode) {
-			case 0:
-				$html_files = $this->question_per_page($attemptobj);
-				break;
-			case 1:
+			default:
+			case quiz_export_engine::PAGEMODE_TRUEPAGE:
 				$html_files = $this->questions_paged($attemptobj);
 				break;
-			case 2:
-				# code...
-				$html_files = $this->all_questions($attemptobj);
-				break;
-			default:
+			case quiz_export_engine::PAGEMODE_QUESTIONPERPAGE:
 				$html_files = $this->question_per_page($attemptobj);
 				break;
+			case quiz_export_engine::PAGEMODE_SINGLEPAGE:
+				$html_files = $this->all_questions($attemptobj);
+				break;
 		}
-
-
-		$wkhtmltopdf = "wkhtmltopdf";
 
 		$tmp_dir = sys_get_temp_dir();
 		$tmp_file = tempnam($tmp_dir, "mdl-qexp_");
@@ -57,9 +72,10 @@ class quiz_export_engine {
 
 		$input_files = implode(' ', $html_files);
 
-		$cmd = $wkhtmltopdf ." ". $input_files ." ". $tmp_pdf_file ." 2> ". $tmp_err_file;
+		$cmd = $this->wkhtmltopdf ." ". $input_files ." ". $tmp_pdf_file ." 2> ". $tmp_err_file;
 		$shell_exec_stdout = shell_exec($cmd);
 
+		// debug
 		// echo "std out:<br>";
 		// echo $shell_exec_stdout;
 		// echo "<br>";
@@ -67,9 +83,7 @@ class quiz_export_engine {
 		// readfile($tmp_err_file);
 
 		// cleanup
-		// unlink($tmp_pdf_file);
 		unlink($tmp_err_file);
-		// delete temp html files
 		foreach ($html_files as $file) {
 			unlink($file);
 		}
@@ -148,7 +162,6 @@ class quiz_export_engine {
 
 		return array($tmp_html_file);
 	}
-
 
 	protected function render($attemptobj, $slots, $page, $showall, $lastpage) {
 		global $PAGE, $CFG;

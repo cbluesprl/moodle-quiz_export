@@ -48,7 +48,7 @@ class quiz_export_table extends quiz_attempts_report_table {
         }
 
         return $html . html_writer::empty_tag('br') . html_writer::link(
-                new moodle_url('/mod/quiz/report/export/a2pdf.php', array('attempt' => $attempt->attempt)),
+                new moodle_url('/mod/quiz/report/export/a2pdf.php', array('attempt' => $attempt->attempt, 'inline' => 1, 'pagemode' => $this->options->pagemode)),
                 get_string('exportattempt', 'quiz_export'), array('class' => 'reviewlink'));
     }
 

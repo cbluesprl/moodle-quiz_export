@@ -17,3 +17,10 @@ $string['exportselected'] = 'Export selected attempts';
 $string['exportattemptcheck'] = 'Export selected attempts?';
 
 $string['exportattempt'] = 'Export attempt';
+
+// export_form
+$string['exportsettings'] = 'Export Settings';
+$string['pagemode'] = 'Page mode (Page break mode while rendering quiz review before converting to PDF)';
+$string['exportmodetruepage'] = 'Actual question page assignment';
+$string['exportmodequestionperpage'] = 'One question per page';
+$string['exportmodesinglepage'] = 'All questions on one page';

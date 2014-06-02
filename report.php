@@ -26,6 +26,8 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  */
 class quiz_export_report extends quiz_attempts_report {
 
+    private $options;
+
     public function display($quiz, $cm, $course) {
         global $PAGE;
         
@@ -34,22 +36,22 @@ class quiz_export_report extends quiz_attempts_report {
             $this->init('export', 'quiz_export_settings_form', $quiz, $cm, $course);
 
         // this creates a new options object and ...
-        $options = new quiz_export_options('export', $quiz, $cm, $course);
+        $this->options = new quiz_export_options('export', $quiz, $cm, $course);
         // ... takes the information from the form object
         if ($fromform = $this->form->get_data()) {
-            $options->process_settings_from_form($fromform);
+            $this->options->process_settings_from_form($fromform);
         } else {
-            $options->process_settings_from_params();
+            $this->options->process_settings_from_params();
         }
         // write the information from options back to form (in case options changed due to params)
-        $this->form->set_data($options->get_initial_form_data());
+        $this->form->set_data($this->options->get_initial_form_data());
 
         // 
         $questions = quiz_report_get_significant_questions($quiz);
 
         // 
         $table = new quiz_export_table($quiz, $this->context, $this->qmsubselect,
-                $options, $groupstudents, $students, $questions, $options->get_url());
+                $this->options, $groupstudents, $students, $questions, $this->options->get_url());
 
         // downloading?
         // $table->is_downloading('csv', 'filename', 'Sheettitle');
@@ -61,7 +63,7 @@ class quiz_export_report extends quiz_attempts_report {
         // $PAGE->set_pagelayout('print');
         
         // process actions
-        $this->process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $options->get_url());
+        $this->process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $this->options->get_url());
 
         // Start output.
 
@@ -70,10 +72,10 @@ class quiz_export_report extends quiz_attempts_report {
             $this->print_header_and_tabs($cm, $course, $quiz, $this->mode);
         }
 
-        // // no idea what this operated
+        // no idea what this operated
         if ($groupmode = groups_get_activity_groupmode($cm)) {
             // Groups are being used, so output the group selector
-            groups_print_activity_menu($cm, $options->get_url());
+            groups_print_activity_menu($cm, $this->options->get_url());
         }
 
         $hasquestions = quiz_questions_in_quiz($quiz->questions);
@@ -88,7 +90,7 @@ class quiz_export_report extends quiz_attempts_report {
         $this->form->display();
 
         $hasstudents = $students && (!$currentgroup || $groupstudents);
-        if ($hasquestions && ($hasstudents || $options->attempts == self::ALL_WITH)) {
+        if ($hasquestions && ($hasstudents || $this->options->attempts == self::ALL_WITH)) {
             list($fields, $from, $where, $params) = $table->base_sql($allowed);
             // function documentation says we don't need to do this
             // $table->set_count_sql("SELECT COUNT(1) FROM $from WHERE $where", $params);
@@ -108,10 +110,10 @@ class quiz_export_report extends quiz_attempts_report {
             $this->add_time_columns($columns, $headers);
 
             // Set up the table.
-            $this->set_up_table_columns($table, $columns, $headers, $this->get_base_url(), $options, false);
+            $this->set_up_table_columns($table, $columns, $headers, $this->get_base_url(), $this->options, false);
             // $table->set_attribute('class', 'generaltable generalbox grades');
             // Print the table
-            $table->out($options->pagesize, true);
+            $table->out($this->options->pagesize, true);
         }
     }
 
@@ -132,7 +134,7 @@ class quiz_export_report extends quiz_attempts_report {
                 if ($attemptids = optional_param_array('attemptid', array(), PARAM_INT)) {
                     // require_capability('mod/quiz:deleteattempts', $this->context);
                     $this->export_attempts($quiz, $cm, $attemptids, $allowed);
-                    redirect($redirecturl);
+                    // redirect($redirecturl);
                 }
             }
         }
@@ -164,7 +166,7 @@ class quiz_export_report extends quiz_attempts_report {
 
         foreach ($attemptids as $attemptid) {
             $attemptobj = quiz_attempt::create($attemptid);
-            $pdf_file = $exporter->a2pdf($attemptobj, 0);
+            $pdf_file = $exporter->a2pdf($attemptobj, $this->options->pagemode);
             $pdf_files[] = $pdf_file;
             $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
             $zip->addFile($pdf_file, fullname($student, true) ."_". $attemptid.'.pdf');
