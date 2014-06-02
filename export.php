@@ -12,6 +12,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once(dirname(__FILE__) . '/../../../../config.php');
+require_once(dirname(__FILE__) . '/config.php');
 
 
 /**
@@ -21,8 +22,6 @@ require_once(dirname(__FILE__) . '/../../../../config.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class quiz_export_engine {
-
-	private $wkhtmltopdf = "wkhtmltopdf";
 
 	/**
 	 * Actual question page assignment like in quiz settings.
@@ -72,7 +71,7 @@ class quiz_export_engine {
 
 		$input_files = implode(' ', $html_files);
 
-		$cmd = $this->wkhtmltopdf ." ". $input_files ." ". $tmp_pdf_file ." 2> ". $tmp_err_file;
+		$cmd = quiz_export_config::WKHTMLTOPDF ." ". $input_files ." ". $tmp_pdf_file ." 2> ". $tmp_err_file;
 		$shell_exec_stdout = shell_exec($cmd);
 
 		// debug
