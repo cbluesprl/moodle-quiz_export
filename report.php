@@ -134,7 +134,7 @@ class quiz_export_report extends quiz_attempts_report {
                 if ($attemptids = optional_param_array('attemptid', array(), PARAM_INT)) {
                     // require_capability('mod/quiz:deleteattempts', $this->context);
                     $this->export_attempts($quiz, $cm, $attemptids, $allowed);
-                    // redirect($redirecturl);
+                    redirect($redirecturl);
                 }
             }
         }
