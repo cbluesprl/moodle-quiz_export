@@ -21,8 +21,18 @@ defined('MOODLE_INTERNAL') || die();
 class quiz_export_config {
 	/**
 	 * The wkhtmltopdf command with optional options.
+	 * See wkhtmltopdf man page for detailed information. Some tips below:
+	 * 
 	 * --javascript-delay 1000 is recommended because some questiontypes uses javascript for rendering.
 	 * And otherwise some js files may be not loaded or ready with calculations until wkhtmltopdf starts rendering.
+	 * Increase this value if loading of scripts needs longer.
+	 * 
+	 * --user-style-sheet style.css allows to pass in additonal css styles
+	 * html {width: 800px;} recommended to avoid scaling and positioning problems.
+	 * (800 because wkhtmltopdf's screen resolution is hardcoded to 800x600)
+	 * 
+	 * e.g.:
+	 * "/usr/local/bin/wkhtmltopdf --javascript-delay 1500 --user-style-sheet convert-style.css"
 	 */
 	const WKHTMLTOPDF = "wkhtmltopdf";
 }
