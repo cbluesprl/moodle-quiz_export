@@ -35,4 +35,11 @@ class quiz_export_config {
 	 * "/usr/local/bin/wkhtmltopdf --javascript-delay 1500 --user-style-sheet convert-style.css"
 	 */
 	const WKHTMLTOPDF = "wkhtmltopdf";
+
+	/**
+	 * Default pagemode for export:
+	 * PAGEMODE_TRUEPAGE, PAGEMODE_QUESTIONPERPAGE or PAGEMODE_SINGLEPAGE.
+	 * For more information about pagemode see export.php.
+	 */
+	const PAGEMODE_DEFAULT = quiz_export_engine::PAGEMODE_TRUEPAGE;
 }
