@@ -3,6 +3,8 @@ moodle-quiz-export
 
 This is a quiz report plugin for [moodle](https://moodle.org/) to export quiz attempts as pdf. Single quiz attempt exports are possible as well as bulk exports as zip files.
 
+The plugin is currently in beta status and not well tested at the moment.
+
 # Dependencies
 * wkhtmltopdf (http://wkhtmltopdf.org/) must installed on the system and configured in config.php
 
