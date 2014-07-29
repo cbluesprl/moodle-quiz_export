@@ -11,7 +11,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-// require_once($CFG->dirroot . '/mod/quiz/report/default.php');
+require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_options.php');
@@ -29,7 +29,7 @@ class quiz_export_report extends quiz_attempts_report {
     private $options;
 
     public function display($quiz, $cm, $course) {
-        global $PAGE;
+        global $PAGE, $OUTPUT;
         
         // this inits the quiz_attempts_report (parent class) functionality
         list($currentgroup, $students, $groupstudents, $allowed) =
