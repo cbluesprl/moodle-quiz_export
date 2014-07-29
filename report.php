@@ -78,7 +78,7 @@ class quiz_export_report extends quiz_attempts_report {
             groups_print_activity_menu($cm, $this->options->get_url());
         }
 
-        $hasquestions = quiz_questions_in_quiz($quiz->questions);
+        $hasquestions = quiz_has_questions($quiz->id);
         if (!$hasquestions) {
             echo quiz_no_questions_message($quiz, $cm, $this->context);
         } else if (!$students) {
