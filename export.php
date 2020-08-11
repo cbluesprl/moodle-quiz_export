@@ -9,10 +9,12 @@
  */
 
 
+use Mpdf\Mpdf;
+
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/config.php');
-require_once(dirname(__FILE__) . '/config.php');
+require_once $CFG->dirroot . '/vendor/autoload.php';
 
 
 /**
@@ -46,18 +48,6 @@ class quiz_export_engine {
 	 * @return file_path       File path and name as string of the pdf file.
 	 */
 	public function a2pdf($attemptobj, $pagemode) {
-		switch ($pagemode) {
-			default:
-			case quiz_export_engine::PAGEMODE_TRUEPAGE:
-				$html_files = $this->questions_paged($attemptobj);
-				break;
-			case quiz_export_engine::PAGEMODE_QUESTIONPERPAGE:
-				$html_files = $this->question_per_page($attemptobj);
-				break;
-			case quiz_export_engine::PAGEMODE_SINGLEPAGE:
-				$html_files = $this->all_questions($attemptobj);
-				break;
-		}
 
 		$tmp_dir = sys_get_temp_dir();
 		$tmp_file = tempnam($tmp_dir, "mdl-qexp_");
@@ -69,20 +59,53 @@ class quiz_export_engine {
 		rename($tmp_file, $tmp_err_file);
 		chmod($tmp_err_file, 0644);
 
-		$input_files = implode(' ', $html_files);
+        $pdf = new \Mpdf\Mpdf([
+            'tempDir' => $tmp_dir,
+        ]);
 
-		$options = '';
-		$options = $options.' --cookie MoodleSession '. $_COOKIE['MoodleSession'];
-		$cmd = quiz_export_config::WKHTMLTOPDF .$options .' '. $input_files .' '. $tmp_pdf_file .' 2> '. $tmp_err_file;
-		session_write_close();
-		$shell_exec_stdout = shell_exec($cmd);
+        ob_start();  // start output buffering html
+        include __DIR__ . '/style/style.css';
+        $css = ob_get_clean();
+        $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
 
-		// debug
-		// echo "std out:<br>";
-		// echo $shell_exec_stdout;
-		// echo "<br>";
-		// echo "std err:<br>";
-		// readfile($tmp_err_file);
+        $parameters_additionnal_informations = $this->get_additionnal_informations($attemptobj);
+        $additionnal_informations = '<h1 class="text-center">' . get_string('documenttitle', 'quiz_export', $parameters_additionnal_informations) . '</h1>';
+
+        switch ($pagemode) {
+            default:
+            case quiz_export_engine::PAGEMODE_TRUEPAGE:
+                $html_files = $this->questions_paged($attemptobj);
+                break;
+            case quiz_export_engine::PAGEMODE_QUESTIONPERPAGE:
+                $html_files = $this->question_per_page($attemptobj);
+                break;
+            case quiz_export_engine::PAGEMODE_SINGLEPAGE:
+                $html_files = $this->all_questions($attemptobj);
+                ob_start();  // start output buffering html
+                include $html_files[0];
+                $contentHTML = ob_get_clean();
+                $pdf->WriteHTML($additionnal_informations, \Mpdf\HTMLParserMode::HTML_BODY);
+                $pdf->WriteHTML($contentHTML, \Mpdf\HTMLParserMode::HTML_BODY);
+                break;
+        }
+        if($pagemode = quiz_export_engine::PAGEMODE_TRUEPAGE || $pagemode = quiz_export_engine::PAGEMODE_QUESTIONPERPAGE){
+            $current_page = 0;
+            foreach ($html_files as $html_file) {
+                ob_start();  // start output buffering html
+                include $html_file;
+                $contentHTML = ob_get_clean();
+                if($current_page == 0){
+                    $pdf->WriteHTML($additionnal_informations, \Mpdf\HTMLParserMode::HTML_BODY);
+                }
+                $pdf->WriteHTML($contentHTML, \Mpdf\HTMLParserMode::HTML_BODY);
+                if(!$attemptobj->is_last_page($current_page)){
+                    $pdf->AddPage();
+                }
+                $current_page++;
+            }
+        }
+
+        $pdf->Output($tmp_pdf_file, \Mpdf\Output\Destination::FILE);
 
 		// cleanup
 		unlink($tmp_err_file);
@@ -114,6 +137,7 @@ class quiz_export_engine {
 				chmod($tmp_html_file, 0644);
 
 				$output = $this->get_review_html($attemptobj, $slots, $page, $showall, $lastpage);
+
 				file_put_contents($tmp_html_file, $output);
 
 				$tmp_html_files[] = $tmp_html_file;
@@ -130,6 +154,7 @@ class quiz_export_engine {
 
 		for ($page=0; $page < $num_pages; $page++) {
 			$slots = $attemptobj->get_slots($page);
+
 			$lastpage = $attemptobj->is_last_page($page);
 			
 			$tmp_dir = sys_get_temp_dir();
@@ -189,7 +214,7 @@ class quiz_export_engine {
 		$summarydata = $this->summary_table($attemptobj, $options);
 
 		// display only content
-		// $PAGE->force_theme('standard');
+		//$PAGE->force_theme('boost');
 		$PAGE->set_pagelayout('embedded');
 
 		$output = $PAGE->get_renderer('mod_quiz');
@@ -350,4 +375,21 @@ class quiz_export_engine {
 
 		$PAGE->set_context(null);
 	}
+
+	/**
+	 * Get student's firstname and lastname + quiz name
+	 * to display at the top of the document
+	 * @param quiz_attempt $attemptobj The attempt object the summary is for.
+	 * @return array contains additionnals informations
+	 */
+	protected function get_additionnal_informations($attemptobj){
+	    global $DB;
+        $user_id = $attemptobj->get_userid();
+        $user_informations = $DB->get_record('user', ['id' => $user_id], 'firstname, lastname');
+	    return [
+            'firstname' => $user_informations->firstname,
+            'lastname' => $user_informations->lastname,
+            'quizname' => $attemptobj->get_quiz_name()
+        ];
+    }
 }

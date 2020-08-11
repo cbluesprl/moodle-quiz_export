@@ -24,3 +24,6 @@ $string['pagemode'] = 'Page mode (Page break mode while rendering quiz review be
 $string['exportmodetruepage'] = 'Actual question page assignment';
 $string['exportmodequestionperpage'] = 'One question per page';
 $string['exportmodesinglepage'] = 'All questions on one page';
+
+// in pdf
+$string['documenttitle'] = 'Summary of {$a->firstname} {$a->lastname}\'s attempt at the "{$a->quizname}" quiz';

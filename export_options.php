@@ -23,7 +23,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  */
 class quiz_export_options extends mod_quiz_attempts_report_options {
 
-	public $pagemode = quiz_export_config::PAGEMODE_DEFAULT;
+	public $pagemode = quiz_export_engine::PAGEMODE_QUESTIONPERPAGE;
 	
 	protected function get_url_params() {
 		$params = parent::get_url_params();
