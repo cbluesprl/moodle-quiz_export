@@ -21,9 +21,9 @@ $string['exportattempt'] = 'Exporter cette tentative en pdf';
 // export_form
 $string['exportsettings'] = 'Paramètres d\'export';
 $string['pagemode'] = 'Mode de pagination (La manière dont vont être gérés les sauts de page lors de l\'export PDF)';
-$string['exportmodetruepage'] = 'Actual question page assignment';
+$string['exportmodetruepage'] = 'Les pages de questions réellement posées';
 $string['exportmodequestionperpage'] = 'Une seule question par page';
 $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
 
 // in pdf
-$string['documenttitle'] = 'Résumé de la tentative de {$a->firstname} {$a->lastname} pour le quiz "{$a->quizname}"';
+$string['documenttitle'] = '{$a->quizname} <br> - <br> Résumé de la tentative de {$a->firstname} {$a->lastname}';

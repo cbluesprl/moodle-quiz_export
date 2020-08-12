@@ -1,5 +1,4 @@
 <?php
-
 /**
  * This file downloads a single quiz attempt.
  *
@@ -35,10 +34,12 @@ $exporter = new quiz_export_engine();
 $pdf_file = $exporter->a2pdf($attemptobj, $pagemode);
 
 header("Content-Type: application/pdf");
+$info = $exporter->get_additionnal_informations($attemptobj);
+$filename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
 if ($inline) {
-	header("Content-Disposition: inline; filename=\"quiz.pdf\"");
+	header("Content-Disposition: inline; filename=\"" . $filename . "\"");
 } else {
-	header("Content-Disposition: attachment; filename=\"quiz.pdf\"");
+	header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
 }
 
 readfile($pdf_file);
