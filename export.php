@@ -385,6 +385,7 @@ class quiz_export_engine {
 	    return [
             'firstname' => $user_informations->firstname,
             'lastname' => $user_informations->lastname,
+            'coursename' => $attemptobj->get_course()->fullname,
             'quizname' => $attemptobj->get_quiz_name()
         ];
     }
