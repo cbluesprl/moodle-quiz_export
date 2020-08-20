@@ -82,8 +82,8 @@ class quiz_export_engine {
                 include $html_files[0];
                 $contentHTML = ob_get_clean();
 
-                $pdf->WriteHTML($additionnal_informations, \Mpdf\HTMLParserMode::HTML_BODY);
-                $pdf->WriteHTML($contentHTML, \Mpdf\HTMLParserMode::HTML_BODY);
+                $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
+                $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::HTML_BODY);
                 break;
         }
         if($pagemode == quiz_export_engine::PAGEMODE_TRUEPAGE || $pagemode == quiz_export_engine::PAGEMODE_QUESTIONPERPAGE){
@@ -92,10 +92,11 @@ class quiz_export_engine {
                 ob_start();  // start output buffering html
                 include $html_file;
                 $contentHTML = ob_get_clean();
+
                 if($current_page == 0){
-                    $pdf->WriteHTML($additionnal_informations, \Mpdf\HTMLParserMode::HTML_BODY);
+                    $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
-                $pdf->WriteHTML($contentHTML, \Mpdf\HTMLParserMode::HTML_BODY);
+                $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::HTML_BODY);
                 if(!$attemptobj->is_last_page($current_page)){
                     $pdf->AddPage();
                 }
@@ -112,7 +113,7 @@ class quiz_export_engine {
 
 		return $tmp_pdf_file;
 	}
-	
+
 	protected function question_per_page($attemptobj) {
 		$tmp_html_files = array();
 		$showall = false;
@@ -126,7 +127,7 @@ class quiz_export_engine {
 				// we have just one question id but an array is required from render function
 				$slots = array();
 				$slots[] = $questionid;
-				
+
 				$tmp_dir = sys_get_temp_dir();
 				$tmp_file = tempnam($tmp_dir, "mdl-qexp_");
 				$tmp_html_file = $tmp_file .".html";
@@ -153,7 +154,7 @@ class quiz_export_engine {
 			$slots = $attemptobj->get_slots($page);
 
 			$lastpage = $attemptobj->is_last_page($page);
-			
+
 			$tmp_dir = sys_get_temp_dir();
 			$tmp_file = tempnam($tmp_dir, "mdl-qexp_");
 			$tmp_html_file = $tmp_file .".html";
@@ -353,7 +354,7 @@ class quiz_export_engine {
 	/**
 	 * Overwrites the $PAGE global with a new moodle_page instance.
 	 * Code is original from lib/setup.php and lib/adminlib.php
-	 * @return void 
+	 * @return void
 	 */
 	protected function setup_new_page() {
 		global $CFG, $PAGE;
@@ -388,5 +389,38 @@ class quiz_export_engine {
             'coursename' => $attemptobj->get_course()->fullname,
             'quizname' => $attemptobj->get_quiz_name()
         ];
+    }
+
+    protected function preloadImageWithCurrentSession($html)
+    {
+        $matches = [];
+        $matches_content = [];
+        preg_match_all("/<img.*src=\"(https?:\/\/.*)\".*>/U", $html, $matches);
+
+        if (count($matches[1]) > 0 ) {
+            $cookieFile = '/tmp/cookie-pdf';
+            file_put_contents($cookieFile, "MoodleSession=".$_COOKIE['MoodleSession']);
+            session_write_close(); // without that we have to wait the script eneded to load images => time out
+            foreach ($matches[1] as $match) {
+                $ch = curl_init($match);
+                $strCookie = session_name() . '=' . $_COOKIE[ session_name() ] . '; path=/';
+                curl_setopt( $ch, CURLOPT_COOKIE, $strCookie);
+                curl_setopt($ch, CURLOPT_HEADER, 0);
+                curl_setopt($ch, CURLOPT_NOBODY, 0);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5); //timeout in seconds
+                $header  = curl_getinfo( $ch );
+                $result = curl_exec($ch);
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mimeType = $finfo->buffer($result);
+                $matches_content[] = "data:" . $mimeType . ";base64,".base64_encode($result);
+                curl_close($ch);
+            }
+            $html = str_replace($matches[1], $matches_content, $html);
+        }
+
+        return $html;
+
     }
 }
