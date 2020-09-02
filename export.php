@@ -10,9 +10,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->dirroot . '/config.php');
-require_once $CFG->dirroot . '/vendor/autoload.php';
-
+require_once __DIR__ . '/vendor/autoload.php';
 
 /**
  * Quiz export engine class.
