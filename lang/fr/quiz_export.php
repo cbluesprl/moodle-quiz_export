@@ -26,4 +26,4 @@ $string['exportmodequestionperpage'] = 'Une seule question par page';
 $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
 
 // in pdf
-$string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Résumé de la tentative de {$a->firstname} {$a->lastname}';
+$string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Réponses de {$a->firstname} {$a->lastname}';
