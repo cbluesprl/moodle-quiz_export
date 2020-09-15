@@ -1,6 +1,7 @@
-body{
-    font-size: 0.8rem;
+body, html, *{
+    font-size: 13px !important;
 }
+
 /* Hide elements that are not useful in a pdf */
 .comment,
 .editquestion,
