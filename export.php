@@ -89,14 +89,19 @@ class quiz_export_engine {
             $current_page = 0;
             foreach ($html_files as $html_file) {
                 ob_start();  // start output buffering html
+                include __DIR__ . '/style/style.css';
+                $css = ob_get_clean();
+                $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
+
+                ob_start();  // start output buffering html
                 include $html_file;
                 $contentHTML = ob_get_clean();
                 $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
-
                 if($current_page == 0){
                     $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
+
                 if(!$attemptobj->is_last_page($current_page)){
                     $pdf->AddPage();
                 }
