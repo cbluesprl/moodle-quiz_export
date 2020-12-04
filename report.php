@@ -100,6 +100,12 @@ class quiz_export_report extends quiz_attempts_report {
             $columns = array();
             $headers = array();
 
+            if (!$table->is_downloading() && $this->options->checkboxcolumn) {
+                $columnname = 'checkboxAll';
+                $columns[] = $columnname;
+                $headers[] = $table->checkbox_col_header($columnname);
+            }
+
             // display a checkbox column for bulk export
             $columns[] = 'checkbox';
             $headers[] = null;
