@@ -12,6 +12,9 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
+raise_memory_limit(MEMORY_HUGE);
+set_time_limit(600);
+
 $attemptid = required_param('attempt', PARAM_INT);
 $pagemode  = optional_param('pagemode', quiz_export_engine::PAGEMODE_TRUEPAGE, PARAM_INT);
 $inline    = optional_param('inline', 0, PARAM_INT);

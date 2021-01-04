@@ -30,7 +30,7 @@ class quiz_export_report extends quiz_attempts_report {
 
     public function display($quiz, $cm, $course) {
         global $PAGE, $OUTPUT;
-        
+
         // this inits the quiz_attempts_report (parent class) functionality
         list($currentgroup, $students, $groupstudents, $allowed) =
             $this->init('export', 'quiz_export_settings_form', $quiz, $cm, $course);
@@ -46,10 +46,10 @@ class quiz_export_report extends quiz_attempts_report {
         // write the information from options back to form (in case options changed due to params)
         $this->form->set_data($this->options->get_initial_form_data());
 
-        // 
+        //
         $questions = quiz_report_get_significant_questions($quiz);
 
-        // 
+        //
         $table = new quiz_export_table($quiz, $this->context, $this->qmsubselect,
                 $this->options, $groupstudents, $students, $questions, $this->options->get_url());
 
@@ -61,7 +61,7 @@ class quiz_export_report extends quiz_attempts_report {
         // $PAGE->set_pagelayout('embedded');
         // just breadcrump bar and title
         // $PAGE->set_pagelayout('print');
-        
+
         // process actions
         $this->process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $this->options->get_url());
 
@@ -137,6 +137,8 @@ class quiz_export_report extends quiz_attempts_report {
 
         if (empty($currentgroup) || $groupstudents) {
             if (optional_param('export', 0, PARAM_BOOL) && confirm_sesskey()) {
+                raise_memory_limit(MEMORY_HUGE);
+                set_time_limit(600);
                 if ($attemptids = optional_param_array('attemptid', array(), PARAM_INT)) {
                     // require_capability('mod/quiz:deleteattempts', $this->context);
                     $this->export_attempts($quiz, $cm, $attemptids, $allowed);
