@@ -4,7 +4,8 @@
  * This file defines the quiz export report class.
  *
  * @package   quiz_export
- * @copyright 2014 Johannes Burk
+ * @copyright 2020 CBlue Srl
+ * @copyright based on work by 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -21,21 +22,26 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 /**
  * Quiz report subclass for the export report.
  *
- * @copyright 2014 Johannes Burk
+ * @package   quiz_export
+ * @copyright 2020 CBlue Srl
+ * @copyright based on work by 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_report extends quiz_attempts_report {
+class quiz_export_report extends quiz_attempts_report
+{
 
+    /** @var object Store options for the quiz export report (page mode, etc.) */
     private $options;
 
-    public function display($quiz, $cm, $course) {
-        global $PAGE, $OUTPUT;
+    public function display($quiz, $cm, $course)
+    {
+        global $OUTPUT;
 
-        // this inits the quiz_attempts_report (parent class) functionality
+        // This inits the quiz_attempts_report (parent class) functionality
         list($currentgroup, $students, $groupstudents, $allowed) =
             $this->init('export', 'quiz_export_settings_form', $quiz, $cm, $course);
 
-        // this creates a new options object and ...
+        // This creates a new options object and ...
         $this->options = new quiz_export_options('export', $quiz, $cm, $course);
         // ... takes the information from the form object
         if ($fromform = $this->form->get_data()) {
@@ -46,33 +52,31 @@ class quiz_export_report extends quiz_attempts_report {
         // write the information from options back to form (in case options changed due to params)
         $this->form->set_data($this->options->get_initial_form_data());
 
-        //
         $questions = quiz_report_get_significant_questions($quiz);
 
-        //
         $table = new quiz_export_table($quiz, $this->context, $this->qmsubselect,
-                $this->options, $groupstudents, $students, $questions, $this->options->get_url());
+            $this->options, $groupstudents, $students, $questions, $this->options->get_url());
 
-        // downloading?
+        // Downloading?
         // $table->is_downloading('csv', 'filename', 'Sheettitle');
 
-        // set layout e.g. for hiding navigation
-        // nothing but content
+        // Set layout e.g. for hiding navigation
+        // Nothing but content
         // $PAGE->set_pagelayout('embedded');
-        // just breadcrump bar and title
+        // Just breadcrump bar and title
         // $PAGE->set_pagelayout('print');
 
-        // process actions
+        // Process actions
         $this->process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $this->options->get_url());
 
         // Start output.
 
-        // print moodle headers (header, navigation, etc.) only if not downloading
-        if(!$table->is_downloading()) {
+        // Print moodle headers (header, navigation, etc.) only if not downloading
+        if (!$table->is_downloading()) {
             $this->print_header_and_tabs($cm, $course, $quiz, $this->mode);
         }
 
-        // no idea what this operated
+        // No idea what this operated
         if ($groupmode = groups_get_activity_groupmode($cm)) {
             // Groups are being used, so output the group selector
             groups_print_activity_menu($cm, $this->options->get_url());
@@ -92,7 +96,7 @@ class quiz_export_report extends quiz_attempts_report {
         $hasstudents = $students && (!$currentgroup || $groupstudents);
         if ($hasquestions && ($hasstudents || $this->options->attempts == self::ALL_WITH)) {
             list($fields, $from, $where, $params) = $table->base_sql($allowed);
-            // function documentation says we don't need to do this
+            // Function documentation says we don't need to do this
             // $table->set_count_sql("SELECT COUNT(1) FROM $from WHERE $where", $params);
             $table->set_sql($fields, $from, $where, $params);
 
@@ -106,7 +110,7 @@ class quiz_export_report extends quiz_attempts_report {
                 $headers[] = $table->checkbox_col_header($columnname);
             }
 
-            // display a checkbox column for bulk export
+            // Display a checkbox column for bulk export
             $columns[] = 'checkbox';
             $headers[] = null;
 
@@ -132,7 +136,8 @@ class quiz_export_report extends quiz_attempts_report {
      * @param array $allowed the users whose attempt this user is allowed to modify.
      * @param moodle_url $redirecturl where to redircet to after a successful action.
      */
-    protected function process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $redirecturl) {
+    protected function process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $redirecturl)
+    {
         // parent::process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $redirecturl);
 
         if (empty($currentgroup) || $groupstudents) {
@@ -157,7 +162,8 @@ class quiz_export_report extends quiz_attempts_report {
      *      Users can only export attempts that they are allowed to see in the report.
      *      Empty means all users.
      */
-    protected function export_attempts($quiz, $cm, $attemptids, $allowed) {
+    protected function export_attempts($quiz, $cm, $attemptids, $allowed)
+    {
         global $DB;
 
         $pdf_files = array();
@@ -165,7 +171,7 @@ class quiz_export_report extends quiz_attempts_report {
 
         $tmp_dir = sys_get_temp_dir();
         $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
-        $tmp_zip_file = $tmp_file .".zip";
+        $tmp_zip_file = $tmp_file . ".zip";
         rename($tmp_file, $tmp_zip_file);
         chmod($tmp_zip_file, 0644);
 
@@ -177,7 +183,7 @@ class quiz_export_report extends quiz_attempts_report {
             $pdf_file = $exporter->a2pdf($attemptobj, $this->options->pagemode);
             $pdf_files[] = $pdf_file;
             $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
-            $zip->addFile($pdf_file, fullname($student, true) ."_". $attemptid.'.pdf');
+            $zip->addFile($pdf_file, fullname($student, true) . "_" . $attemptid . '.pdf');
         }
         $zip->close();
 
@@ -185,7 +191,7 @@ class quiz_export_report extends quiz_attempts_report {
         header("Content-Disposition: attachment; filename=\"quiz_export.zip\"");
         readfile($tmp_zip_file);
 
-        // cleanup
+        // Cleanup
         foreach ($pdf_files as $pdf_file) {
             unlink($pdf_file);
         }

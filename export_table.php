@@ -17,20 +17,24 @@ require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_table.php');
 /**
  * This is a table subclass for displaying the quiz export report.
  *
+ * @package   quiz_export
  * @copyright 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_table extends quiz_attempts_report_table {
+class quiz_export_table extends quiz_attempts_report_table
+{
 
     public function __construct($quiz, $context, $qmsubselect,
-            quiz_export_options $options, $groupstudents, $students, $questions, $reporturl) {
-        parent::__construct('mod-quiz-report-export-report', $quiz , $context,
-                $qmsubselect, $options, $groupstudents, $students, $questions, $reporturl);
+                                quiz_export_options $options, $groupstudents, $students, $questions, $reporturl)
+    {
+        parent::__construct('mod-quiz-report-export-report', $quiz, $context,
+            $qmsubselect, $options, $groupstudents, $students, $questions, $reporturl);
     }
 
-	public function build_table() {
-		// strange: parent class quiz_attempts_report_table uses this property but doesn't define it
-		// so we have to do it here... just for quiz_attempts_report::add_time_columns
+    public function build_table()
+    {
+        // Strange: parent class quiz_attempts_report_table uses this property but doesn't define it
+        // So we have to do it here... just for quiz_attempts_report::add_time_columns
         $this->strtimeformat = str_replace(',', ' ', get_string('strftimedatetime'));
         parent::build_table();
     }
@@ -38,10 +42,12 @@ class quiz_export_table extends quiz_attempts_report_table {
     /**
      * Generate the display of the user's full name column.
      * Adds an export Link
+     *
      * @param object $attempt the table row being output.
      * @return string HTML content to go inside the td.
      */
-    public function col_fullname($attempt) {
+    public function col_fullname($attempt)
+    {
         $html = parent::col_fullname($attempt);
         if ($this->is_downloading() || empty($attempt->attempt)) {
             return $html;
@@ -52,11 +58,12 @@ class quiz_export_table extends quiz_attempts_report_table {
                 get_string('exportattempt', 'quiz_export'), array('class' => 'reviewlink'));
     }
 
-    protected function submit_buttons() {
+    protected function submit_buttons()
+    {
         global $PAGE;
         echo '<input type="submit" id="exportattemptsbutton" name="export" value="' .
-           get_string('exportselected', 'quiz_export') . '"/>';
+            get_string('exportselected', 'quiz_export') . '"/>';
         $PAGE->requires->event_handler('#exportattemptsbutton', 'click', 'M.util.show_confirm_dialog',
-                    array('message' => get_string('exportattemptcheck', 'quiz_export')));
+            array('message' => get_string('exportattemptcheck', 'quiz_export')));
     }
 }

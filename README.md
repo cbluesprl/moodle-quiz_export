@@ -13,16 +13,14 @@ Use version 1.x of this plugin.
 Use version 2.x of this plugin.
 
 # Dependencies
-* wkhtmltopdf (http://wkhtmltopdf.org/) must installed on the system and configured in config.php
+* mpdf (https://mpdf.github.io/) must be installed. Run "composer install" to install it.
 
 # Installation:
 * switch to /path/to/moodle/mod/quiz/report/
 * execute git clone https://github.com/elcc/moodle-quiz-export.git export
 * depending on your moodle version checkout either branch quiz-export_v1 or quiz-export_v2: git checkout quiz-export_v1
 * composer install 
-* adjust settings in export/config.php
 * on moodle page go to "Site Administration" -> "Notifications" and follow the instructions
-
 
 # Technical Information:
 * this plugin saves html, pdf and zip files temporary in the folder returned by [sys_get_temp_dir()](http://www.php.net/manual/en/function.sys-get-temp-dir.php) PHP function.
