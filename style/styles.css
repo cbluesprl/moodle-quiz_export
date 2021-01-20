@@ -15,7 +15,7 @@ body, html, * {
     display: none !important;
 }
 
-/* Because font awesome does not work */
+/* Because font awesome does not work in pdf (it colors incorrect answers in red) */
 .answer .incorrect {
     color: red;
 }

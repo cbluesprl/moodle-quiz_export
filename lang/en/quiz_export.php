@@ -10,7 +10,7 @@
  */
 
 $string['pluginname'] = 'QuizExport';
-$string['export'] = 'QuizExport'; // displayed in the navigation menu
+$string['export'] = 'Quiz exporting'; // displayed in the navigation menu
 
 $string['exportselected'] = 'Export selected attempts';
 
@@ -25,5 +25,5 @@ $string['exportmodetruepage'] = 'Actual question page assignment';
 $string['exportmodequestionperpage'] = 'One question per page';
 $string['exportmodesinglepage'] = 'All questions on one page';
 
-// in pdf
+// Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Summary of {$a->firstname} {$a->lastname}\'s attempt';

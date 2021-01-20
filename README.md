@@ -1,24 +1,14 @@
-moodle-quiz-export
+moodle-quiz_export
 ==================
 
 This is a quiz report plugin for [moodle](https://moodle.org/) to export quiz attempts as pdf. Single quiz attempt exports are possible as well as bulk exports as zip files.
 
-# Moodle Versions
-Due to some bigger changes since moodle verion 2.6 it's required to use different plugin versions depending on the moodle version you use.
-
-## Moodle < 2.5
-Use version 1.x of this plugin.
-
-## Moodle >= 2.6
-Use version 2.x of this plugin.
-
-# Dependencies
-* mpdf (https://mpdf.github.io/) must be installed. Run "composer install" to install it.
+# Dependencies:
+* mpdf (https://mpdf.github.io/) must be installed. Run "composer install" in the plugin's path to install it.
 
 # Installation:
 * switch to /path/to/moodle/mod/quiz/report/
-* execute git clone https://github.com/elcc/moodle-quiz-export.git export
-* depending on your moodle version checkout either branch quiz-export_v1 or quiz-export_v2: git checkout quiz-export_v1
+* execute git clone <this_github_link> export
 * composer install 
 * on moodle page go to "Site Administration" -> "Notifications" and follow the instructions
 
@@ -27,3 +17,7 @@ Use version 2.x of this plugin.
 	* this files are created with [tempnam()](http://www.php.net/manual/en/function.tempnam.php) function
 	* and modified with [rename()](http://mx2.php.net/manual/en/function.rename.php) and [chmod()](http://mx2.php.net/manual/en/function.chmod.php)
 * zip archives are generated with the [ZipArchive](http://mx2.php.net/manual/en/class.ziparchive.php) class
+
+# Practical information:
+* Open a quiz page. Then click on the cog and choose "Quiz exporting" (or "Export de quiz" in french)
+* On this page, you can choose the export options, then select one (or more) attempts to export (it will be downloaded as zip if more than one attempt has been selected)
