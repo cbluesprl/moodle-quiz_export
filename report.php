@@ -105,8 +105,7 @@ class quiz_export_report extends quiz_attempts_report
             $headers = array();
 
             if (!$table->is_downloading() && $this->options->checkboxcolumn) {
-                $columnname = 'checkboxAll';
-                $columns[] = $columnname;
+                $columnname = 'checkbox';
                 $headers[] = $table->checkbox_col_header($columnname);
             }
 
