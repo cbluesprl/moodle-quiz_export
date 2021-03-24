@@ -52,11 +52,15 @@ class quiz_export_engine
         $parameters_additionnal_informations = $this->get_additionnal_informations($attemptobj);
 
         $tmp_dir = $CFG->dataroot . '/mpdf';
+        ob_start();
         $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
+        ob_get_clean();
         $tmp_pdf_file = $tmp_file . ".pdf";
         rename($tmp_file, $tmp_pdf_file);
         chmod($tmp_pdf_file, 0644);
+        ob_start();
         $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
+        ob_get_clean();
         $tmp_err_file = $tmp_file . ".txt";
         rename($tmp_file, $tmp_err_file);
         chmod($tmp_err_file, 0644);
