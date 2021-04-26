@@ -108,8 +108,7 @@ class quiz_export_engine
                 ob_start();
                 include $html_files[0];
                 $contentHTML = ob_get_clean();
-
-                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
+//                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
                 break;
@@ -127,7 +126,7 @@ class quiz_export_engine
                 ob_start();
                 include $html_file;
                 $contentHTML = ob_get_clean();
-                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
+//                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
                 if ($current_page == 0) {
                     $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
