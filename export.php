@@ -108,7 +108,9 @@ class quiz_export_engine
                 ob_start();
                 include $html_files[0];
                 $contentHTML = ob_get_clean();
-//                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
+                $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
+                $contentHTML = preg_replace("/\" id=\"q.+?readonly\" \/>/", ' - ', $contentHTML);
+
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
                 break;
