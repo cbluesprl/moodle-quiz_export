@@ -129,6 +129,8 @@ class quiz_export_engine
                 include $html_file;
                 $contentHTML = ob_get_clean();
 //                $contentHTML = preg_replace("/<input.*>/U", '', $contentHTML);
+                $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
+                $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
                 if ($current_page == 0) {
                     $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
