@@ -23,7 +23,10 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__) . '/../../../../config.php');
+require_once(__DIR__ . '/../../../../config.php');
+
+global $CFG, $USER;
+
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
@@ -41,7 +44,7 @@ $attemptobj = quiz_attempt::create($attemptid);
 // Check login and permissions
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());
 $attemptobj->check_review_capability();
-if (!$attemptobj->is_review_allowed()) {
+if (!$attemptobj->is_review_allowed() && $attemptobj->get_userid() != $USER->id) {
     throw new moodle_quiz_exception($attemptobj->get_quizobj(), 'noreviewattempt');
 }
 
