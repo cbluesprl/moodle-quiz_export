@@ -33,6 +33,9 @@ $string['exportattemptcheck'] = 'Export selected attempts?';
 
 $string['exportattempt'] = 'Export attempt';
 
+// Privacy.
+$string['privacy:metadata'] = 'QuizExport plugin does not store any personal data.';
+
 // export_form
 $string['exportsettings'] = 'Export Settings';
 $string['exportsettingsinfo'] = 'These settings apply to the exports started from this page, both the single attempt links and the bulk export. Apply them before you export.';
