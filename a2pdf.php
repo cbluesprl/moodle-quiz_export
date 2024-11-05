@@ -42,6 +42,7 @@ $inline = optional_param('inline', 0, PARAM_INT);
 
 // Get attempt object
 $attemptobj = quiz_attempt::create($attemptid);
+$attemptobj->preload_all_attempt_step_users();
 
 // Check login and permissions
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());

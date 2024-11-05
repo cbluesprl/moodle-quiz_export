@@ -195,6 +195,7 @@ class quiz_export_report extends attempts_report
 
         foreach ($attemptids as $attemptid) {
             $attemptobj = quiz_attempt::create($attemptid);
+            $attemptobj->preload_all_attempt_step_users();
             $pdf_file = $exporter->a2pdf($attemptobj, $this->options->pagemode);
             $pdf_files[] = $pdf_file;
             $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
