@@ -23,8 +23,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use mod_quiz\quiz_attempt;
-
 defined('MOODLE_INTERNAL') || die();
 
 require_once __DIR__ . '/vendor/autoload.php';

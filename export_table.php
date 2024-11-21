@@ -23,7 +23,7 @@
  */
 
 
-use mod_quiz\local\reports\attempts_report_table;
+require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_table.php');
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,7 +36,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_table extends attempts_report_table
+class quiz_export_table extends quiz_attempts_report_table
 {
 
     public function __construct($quiz, $context, $qmsubselect,

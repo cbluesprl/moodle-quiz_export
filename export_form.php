@@ -22,12 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-
-use mod_quiz\local\reports\attempts_report_options_form;
-
+require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_form.php');
 defined('MOODLE_INTERNAL') || die();
-
-
 
 /**
  * Quiz export report settings form.
@@ -36,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_settings_form extends attempts_report_options_form
+class quiz_export_settings_form extends mod_quiz_attempts_report_form
 {
 
     protected function other_preference_fields(MoodleQuickForm $mform)

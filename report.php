@@ -25,11 +25,11 @@
 
 
 use mod_quiz\local\reports\attempts_report;
-use mod_quiz\quiz_attempt;
 
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_table.php');
@@ -43,7 +43,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  * @copyright based on work by 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_report extends attempts_report
+class quiz_export_report extends quiz_attempts_report
 {
 
     /** @var object Store options for the quiz export report (page mode, etc.) */

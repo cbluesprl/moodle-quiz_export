@@ -24,11 +24,9 @@
  */
 
 
-use mod_quiz\local\reports\attempts_report_options;
-
 defined('MOODLE_INTERNAL') || die();
 
-
+require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 
@@ -40,7 +38,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  * @copyright based on work by 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_export_options extends attempts_report_options
+class quiz_export_options extends mod_quiz_attempts_report_options
 {
 
     /** @var int Store the page mode for the quiz export report */
