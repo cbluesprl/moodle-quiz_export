@@ -85,6 +85,7 @@ class quiz_export_engine
         $pdf = new \Mpdf\Mpdf([
             'tempDir' => $tmp_dir,
         ]);
+        $pdf->autoLangToFont = true;
 
         // Start output buffering html
         ob_start();
