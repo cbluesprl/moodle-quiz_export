@@ -25,7 +25,7 @@
 
 
 defined('MOODLE_INTERNAL') || die();
-
+global $CFG;
 require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
