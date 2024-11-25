@@ -39,8 +39,7 @@ defined('MOODLE_INTERNAL') || die();
 class quiz_export_table extends attempts_report_table
 {
 
-    public function __construct($quiz, $context, $qmsubselect,
-                                quiz_export_options $options, $groupstudents, $students, $questions, $reporturl)
+    public function __construct($quiz, $context, $qmsubselect, quiz_export_options $options, $groupstudents, $students, $questions, $reporturl)
     {
         parent::__construct('mod-quiz-report-export-report', $quiz, $context,
             $qmsubselect, $options, $groupstudents, $students, $questions, $reporturl);
@@ -57,7 +56,6 @@ class quiz_export_table extends attempts_report_table
     /**
      * Generate the display of the user's full name column.
      * Adds an export Link
-     *
      * @param object $attempt the table row being output.
      * @return string HTML content to go inside the td.
      */

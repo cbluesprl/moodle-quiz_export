@@ -28,7 +28,7 @@ use mod_quiz\local\reports\attempts_report;
 use mod_quiz\quiz_attempt;
 
 defined('MOODLE_INTERNAL') || die();
-
+global $CFG;
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_options.php');

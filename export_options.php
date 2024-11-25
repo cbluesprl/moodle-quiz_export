@@ -28,7 +28,7 @@ use mod_quiz\local\reports\attempts_report_options;
 
 defined('MOODLE_INTERNAL') || die();
 
-
+global $CFG;
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 
