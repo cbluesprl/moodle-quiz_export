@@ -5,12 +5,11 @@ This is a quiz report plugin for [moodle](https://moodle.org/) to export quiz at
 It has been designed to work with mpdf package.
 
 ## Dependencies:
-* mpdf (https://mpdf.github.io/) must be installed. Run "composer install" in the plugin's path to install it.
+* mpdf (https://mpdf.github.io/). The package is included in the plugin
 
 ## Installation:
 * switch to /path/to/moodle/mod/quiz/report/
-* execute git clone <this_github_link> export
-* composer install 
+* execute `git clone <this_github_link> export`
 * on moodle page go to "Site Administration" -> "Notifications" and follow the instructions
 
 ## Technical Information:
@@ -20,8 +19,8 @@ It has been designed to work with mpdf package.
 * zip archives are generated with the [ZipArchive](http://mx2.php.net/manual/en/class.ziparchive.php) class
 
 ## Practical information:
-* Open a quiz page. Then click on the cog and choose "Quiz exporting" (or "Export de quiz" in french)
-* On this page, you can choose the export options, then select one (or more) attempts to export (it will be downloaded as zip if more than one attempt has been selected)
+* Open a quiz page. Then click on the "Results" tab and choose "Quiz exporting" (or "Export de quiz" in french) in the select menu
+* On this page, you can choose the export options, then select one (or more) attempts to export in a zip file containing one or more pdfs depending on selection
 
 ## Copyright
 This plugin is strongly based on [this plugin](https://github.com/elccHTWBerlin/moodle-quiz-export). It has been modified to use mpdf instead of wkhtmltopdf.
