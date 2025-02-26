@@ -32,6 +32,9 @@ $string['exportattemptcheck'] = 'Export selected attempts?';
 
 $string['exportattempt'] = 'Export attempt';
 
+// Privacy.
+$string['privacy:metadata'] = 'QuizExport plugin does not store any personal data.';
+
 // export_form
 $string['exportsettings'] = 'Export Settings';
 $string['pagemode'] = 'Page mode (Page break mode while rendering quiz review before converting to PDF)';
