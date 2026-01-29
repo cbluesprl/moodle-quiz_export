@@ -114,6 +114,7 @@ class quiz_export_engine
                 $contentHTML = ob_get_clean();
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
+                $contentHTML = $this->replaceFontAwesomeIcons($contentHTML);
 
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
@@ -134,6 +135,7 @@ class quiz_export_engine
                 $contentHTML = ob_get_clean();
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
+                $contentHTML = $this->replaceFontAwesomeIcons($contentHTML);
                 if ($current_page == 0) {
                     $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
@@ -387,6 +389,61 @@ class quiz_export_engine
             }
             $html = str_replace($matches[1], $matches_content, $html);
         }
+        return $html;
+    }
+
+    /**
+     * Replace Font Awesome icons with Unicode characters for PDF compatibility.
+     *
+     * mPDF does not support Font Awesome icons, so this method replaces the
+     * <i> tags with <span> elements containing Unicode checkmark/cross characters.
+     *
+     * @param string $html The HTML content.
+     * @return string The HTML with replaced icons.
+     */
+    protected function replaceFontAwesomeIcons($html) {
+        // SVG checkmark icon (green circle with check).
+        $svgCheck = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+            . 'style="display:inline; vertical-align:middle;">'
+            . '<circle cx="12" cy="12" r="10" fill="none" stroke="#198754" stroke-width="2"/>'
+            . '<path d="M7 12l3 3 7-7" fill="none" stroke="#198754" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+            . '</svg>';
+
+        // SVG cross icon (red circle with X).
+        $svgCross = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+            . 'style="display:inline; vertical-align:middle;">'
+            . '<circle cx="12" cy="12" r="10" fill="none" stroke="#dc3545" stroke-width="2"/>'
+            . '<path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>'
+            . '</svg>';
+
+        // Replace correct answer icons (green checkmark).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*fa-circle-check[^"]*text-success[^"]*"[^>]*>.*?<\/i>/is',
+            $svgCheck,
+            $html
+        );
+
+        // Alternative pattern (text-success before fa-circle-check).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*text-success[^"]*fa-circle-check[^"]*"[^>]*>.*?<\/i>/is',
+            $svgCheck,
+            $html
+        );
+
+        // Replace incorrect answer icons (red cross).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*fa-circle-xmark[^"]*text-danger[^"]*"[^>]*>.*?<\/i>/is',
+            $svgCross,
+            $html
+        );
+
+        // Alternative pattern (text-danger before fa-circle-xmark).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*text-danger[^"]*fa-circle-xmark[^"]*"[^>]*>.*?<\/i>/is',
+            $svgCross,
+            $html
+        );
+
         return $html;
     }
 }
