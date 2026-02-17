@@ -39,5 +39,9 @@ $string['exportmodetruepage'] = 'Actual question page assignment';
 $string['exportmodequestionperpage'] = 'One question per page';
 $string['exportmodesinglepage'] = 'All questions on one page';
 
+// Settings.
+$string['timelimit'] = 'PHP time limit for PDF generation';
+$string['timelimitdesc'] = 'Maximum execution time in seconds allowed for PDF generation. Increase this value if PDF exports time out on large quizzes. Set to 0 for unlimited (not recommended). Default: 600 seconds (10 minutes).';
+
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Summary of {$a->firstname} {$a->lastname}\'s attempt';

@@ -39,5 +39,9 @@ $string['exportmodetruepage'] = 'Les pages de questions réellement posées';
 $string['exportmodequestionperpage'] = 'Une seule question par page';
 $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
 
+// Settings.
+$string['timelimit'] = 'Limite de temps PHP pour la génération PDF';
+$string['timelimitdesc'] = 'Temps d\'exécution maximum en secondes autorisé pour la génération des PDF. Augmentez cette valeur si les exports PDF échouent sur les quiz volumineux. Mettre à 0 pour illimité (non recommandé). Par défaut : 600 secondes (10 minutes).';
+
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Réponses de {$a->firstname} {$a->lastname}';

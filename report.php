@@ -158,7 +158,8 @@ class quiz_export_report extends attempts_report
         if (empty($currentgroup) || $groupstudents) {
             if (optional_param('export', 0, PARAM_BOOL) && confirm_sesskey()) {
                 raise_memory_limit(MEMORY_HUGE);
-                set_time_limit(600);
+                $timelimit = get_config('quiz_export', 'timelimit');
+                set_time_limit($timelimit !== false ? (int) $timelimit : 600);
                 if ($attemptids = optional_param_array('attemptid', array(), PARAM_INT)) {
                     // require_capability('mod/quiz:deleteattempts', $this->context);
                     $this->export_attempts($quiz, $cm, $attemptids, $allowed);

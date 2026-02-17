@@ -34,7 +34,8 @@ require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 raise_memory_limit(MEMORY_HUGE);
-set_time_limit(600);
+$timelimit = get_config('quiz_export', 'timelimit');
+set_time_limit($timelimit !== false ? (int) $timelimit : 600);
 
 $attemptid = required_param('attempt', PARAM_INT);
 $pagemode = optional_param('pagemode', quiz_export_engine::PAGEMODE_TRUEPAGE, PARAM_INT);
