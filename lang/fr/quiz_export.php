@@ -43,5 +43,24 @@ $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
 $string['timelimit'] = 'Limite de temps PHP pour la génération PDF';
 $string['timelimitdesc'] = 'Temps d\'exécution maximum en secondes autorisé pour la génération des PDF. Augmentez cette valeur si les exports PDF échouent sur les quiz volumineux. Mettre à 0 pour illimité (non recommandé). Par défaut : 600 secondes (10 minutes).';
 
+// Async export settings.
+$string['asyncsingle'] = 'Activer l\'export individuel asynchrone';
+$string['asyncsingledesc'] = 'Lorsque cette option est activée, les exports PDF individuels sont traités en arrière-plan via une tâche planifiée. L\'utilisateur reçoit une notification lorsque le fichier est prêt à être téléchargé.';
+$string['asyncbulk'] = 'Activer l\'export groupé asynchrone';
+$string['asyncbulkdesc'] = 'Lorsque cette option est activée, les exports PDF groupés (ZIP) sont traités en arrière-plan via une tâche planifiée. L\'utilisateur reçoit une notification lorsque le fichier est prêt à être téléchargé.';
+
+// Async export notifications.
+$string['exportqueued'] = 'Votre export est en cours de préparation. Vous recevrez une notification lorsqu\'il sera prêt.';
+$string['exportcomplete'] = 'Votre export de quiz est prêt à être téléchargé.';
+$string['exportcompletesubject'] = 'Export de quiz prêt';
+$string['downloadexport'] = 'Télécharger l\'export';
+
+// Adhoc task names.
+$string['taskexportsingle'] = 'Exporter une tentative de quiz en PDF';
+$string['taskexportattempts'] = 'Exporter des tentatives de quiz en PDF (groupé)';
+
+// Message provider.
+$string['messageprovider:exportcomplete'] = 'Notification d\'export de quiz terminé';
+
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Réponses de {$a->firstname} {$a->lastname}';

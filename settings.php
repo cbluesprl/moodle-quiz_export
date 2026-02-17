@@ -32,4 +32,26 @@ if ($ADMIN->fulltree) {
         600,
         PARAM_INT
     ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'quiz_export/asyncsingle',
+        get_string('asyncsingle', 'quiz_export'),
+        get_string('asyncsingledesc', 'quiz_export'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'quiz_export/asyncbulk',
+        get_string('asyncbulk', 'quiz_export'),
+        get_string('asyncbulkdesc', 'quiz_export'),
+        1
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'quiz_export/retentiondays',
+        get_string('retentiondays', 'quiz_export'),
+        get_string('retentiondaysdesc', 'quiz_export'),
+        30,
+        PARAM_INT
+    ));
 }

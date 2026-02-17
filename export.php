@@ -95,7 +95,7 @@ class quiz_export_engine
         $css = ob_get_clean();
         $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
 
-        $additionnal_informations = html_writer::tag('h3', get_string('documenttitle', 'quiz_export', $parameters_additionnal_informations), ['class' => 'text-center', 'style' => 'margin-bottom: -20px;']);
+        $additionnal_informations = html_writer::tag('h3', get_string('documenttitle', 'quiz_export', $parameters_additionnal_informations), ['class' => 'text-center', 'style' => 'margin-bottom: 10px;']);
 
         switch ($pagemode) {
             default:

@@ -33,10 +33,6 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
-raise_memory_limit(MEMORY_HUGE);
-$timelimit = get_config('quiz_export', 'timelimit');
-set_time_limit($timelimit !== false ? (int) $timelimit : 600);
-
 $attemptid = required_param('attempt', PARAM_INT);
 $pagemode = optional_param('pagemode', quiz_export_engine::PAGEMODE_TRUEPAGE, PARAM_INT);
 $inline = optional_param('inline', 0, PARAM_INT);
@@ -52,21 +48,42 @@ if (!$attemptobj->is_review_allowed() && $attemptobj->get_userid() != $USER->id)
     throw new moodle_quiz_exception($attemptobj->get_quizobj(), 'noreviewattempt');
 }
 
-// Log this export.
-// add_to_log($attemptobj->get_courseid(), 'quiz', 'export', 'a2pdf.php?attempt=' .
-// $attemptobj->get_attemptid(), $attemptobj->get_quizid(), $attemptobj->get_cmid());
+// Check if async export is enabled.
+$asyncsingle = get_config('quiz_export', 'asyncsingle');
 
-$exporter = new quiz_export_engine();
-$pdf_file = $exporter->a2pdf($attemptobj, $pagemode);
+if (!empty($asyncsingle)) {
+    // Queue an adhoc task for async export.
+    $task = new \quiz_export\task\export_single_attempt();
+    $task->set_custom_data([
+        'attemptid' => $attemptid,
+        'pagemode' => $pagemode,
+        'inline' => $inline,
+        'userid' => $USER->id,
+        'cmid' => $attemptobj->get_cmid(),
+    ]);
+    $task->set_userid($USER->id);
+    \core\task\manager::queue_adhoc_task($task);
 
-header("Content-Type: application/pdf");
-$info = $exporter->get_additionnal_informations($attemptobj);
-$filename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
-if ($inline) {
-    header("Content-Disposition: inline; filename=\"" . $filename . "\"");
+    $quizurl = new moodle_url('/mod/quiz/view.php', ['id' => $attemptobj->get_cmid()]);
+    redirect($quizurl, get_string('exportqueued', 'quiz_export'), null, \core\output\notification::NOTIFY_SUCCESS);
 } else {
-    header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
-}
+    // Synchronous export (original behaviour).
+    raise_memory_limit(MEMORY_HUGE);
+    $timelimit = get_config('quiz_export', 'timelimit');
+    set_time_limit($timelimit !== false ? (int) $timelimit : 600);
 
-readfile($pdf_file);
-unlink($pdf_file);
+    $exporter = new quiz_export_engine();
+    $pdf_file = $exporter->a2pdf($attemptobj, $pagemode);
+
+    header("Content-Type: application/pdf");
+    $info = $exporter->get_additionnal_informations($attemptobj);
+    $filename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
+    if ($inline) {
+        header("Content-Disposition: inline; filename=\"" . $filename . "\"");
+    } else {
+        header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
+    }
+
+    readfile($pdf_file);
+    unlink($pdf_file);
+}
