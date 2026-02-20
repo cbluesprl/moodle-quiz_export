@@ -481,12 +481,27 @@ class quiz_export_engine
         // mPDF does not reliably support the CSS used by .visually-hidden, so strip them from HTML.
         $html = preg_replace('/<[^>]+class="[^"]*\bvisually-hidden\b[^"]*"[^>]*>.*?<\/\w+>/is', '', $html);
 
-        // Step 0b: Normalize whitespace first to ensure regex patterns work correctly.
+        // Step 0b: Convert Bootstrap badge classes to inline styles for mPDF compatibility.
+        // mPDF does not reliably apply background-color + color via CSS classes on inline elements.
+        $html = preg_replace(
+            '/<span([^>]*class="[^"]*\bbadge\b[^"]*\bbg-primary\b[^"]*"[^>]*)>/is',
+            '<span$1 style="background-color:#1177d1;color:#fff;padding:2px 6px;border-radius:3px;">',
+            $html
+        );
+
+        // Step 0c: Normalize whitespace first to ensure regex patterns work correctly.
         $html = preg_replace('/>\s+</', '> <', $html);
 
         // Step 1: Flatten MCQ structure BEFORE replacing inputs/icons.
-        // Remove <p> tags, keep content only.
-        $html = preg_replace('/<p[^>]*>(.*?)<\/p>/is', '$1', $html);
+        // Remove <p> tags only inside MCQ answer rows (r0/r1 divs), keep <p> tags in question text (.qtext).
+        $html = preg_replace_callback(
+            '/<div([^>]*class="[^"]*\b(?:r0|r1)\b[^"]*"[^>]*)>(.*?)<\/div>/is',
+            function ($matches) {
+                $inner = preg_replace('/<p[^>]*>(.*?)<\/p>/is', '$1', $matches[2]);
+                return '<div' . $matches[1] . '>' . $inner . '</div>';
+            },
+            $html
+        );
 
         // Step 2: Replace <div class="flex-fill ...">content</div> with just content.
         $html = preg_replace(

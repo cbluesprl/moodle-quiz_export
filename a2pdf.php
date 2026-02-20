@@ -75,13 +75,29 @@ if (!empty($asyncsingle)) {
     $exporter = new quiz_export_engine();
     $pdf_file = $exporter->a2pdf($attemptobj, $pagemode);
 
-    header("Content-Type: application/pdf");
     $info = $exporter->get_additionnal_informations($attemptobj);
-    $filename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
+    $filename = $info['firstname'] . '_' . $info['lastname'] . '.pdf';
+
+    // Store the file via File API so it appears in export history.
+    $context = \context_module::instance($attemptobj->get_cmid());
+    $fs = get_file_storage();
+    $filerecord = [
+        'contextid' => $context->id,
+        'component' => 'quiz_export',
+        'filearea' => 'export',
+        'itemid' => time(),
+        'filepath' => '/',
+        'filename' => $filename,
+        'userid' => $USER->id,
+    ];
+    $fs->create_file_from_pathname($filerecord, $pdf_file);
+
+    header("Content-Type: application/pdf");
+    $displayfilename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
     if ($inline) {
-        header("Content-Disposition: inline; filename=\"" . $filename . "\"");
+        header("Content-Disposition: inline; filename=\"" . $displayfilename . "\"");
     } else {
-        header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
+        header("Content-Disposition: attachment; filename=\"" . $displayfilename . "\"");
     }
 
     readfile($pdf_file);

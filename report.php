@@ -313,7 +313,7 @@ class quiz_export_report extends attempts_report
      */
     protected function export_attempts($quiz, $cm, $attemptids, $allowed)
     {
-        global $DB;
+        global $DB, $USER;
 
         $pdf_files = array();
         $exporter = new quiz_export_engine();
@@ -337,8 +337,23 @@ class quiz_export_report extends attempts_report
         }
         $zip->close();
 
+        // Store the ZIP file via File API so it appears in export history.
+        $filename = 'quiz_export_' . date('Ymd_His') . '.zip';
+        $context = \context_module::instance($cm->id);
+        $fs = get_file_storage();
+        $filerecord = [
+            'contextid' => $context->id,
+            'component' => 'quiz_export',
+            'filearea' => 'export',
+            'itemid' => time(),
+            'filepath' => '/',
+            'filename' => $filename,
+            'userid' => $USER->id,
+        ];
+        $fs->create_file_from_pathname($filerecord, $tmp_zip_file);
+
         header("Content-Type: application/zip");
-        header("Content-Disposition: attachment; filename=\"quiz_export.zip\"");
+        header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
         readfile($tmp_zip_file);
 
         // Cleanup

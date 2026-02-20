@@ -62,5 +62,25 @@ $string['taskexportattempts'] = 'Exporter des tentatives de quiz en PDF (groupé
 // Message provider.
 $string['messageprovider:exportcomplete'] = 'Notification d\'export de quiz terminé';
 
+// Export history.
+$string['previousexports'] = 'Exports précédents';
+$string['noexportsyet'] = 'Aucun export n\'a encore été généré.';
+$string['exportdate'] = 'Date';
+$string['exportfilename'] = 'Nom du fichier';
+$string['exportfilesize'] = 'Taille';
+$string['exportdownload'] = 'Télécharger';
+$string['exportstatus'] = 'Statut';
+$string['exportstatuspending'] = 'En attente';
+$string['exportstatusinprogress'] = 'En cours';
+$string['exportstatuscomplete'] = 'Terminé';
+$string['exportpending'] = 'Export en préparation…';
+
+// Retention settings.
+$string['retentiondays'] = 'Rétention des exports (jours)';
+$string['retentiondaysdesc'] = 'Nombre de jours de conservation des fichiers d\'export avant suppression automatique. Mettre à 0 pour conserver les fichiers indéfiniment. Par défaut : 30 jours.';
+
+// Scheduled task.
+$string['taskcleanupexports'] = 'Nettoyage des fichiers d\'export de quiz expirés';
+
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Réponses de {$a->firstname} {$a->lastname}';
