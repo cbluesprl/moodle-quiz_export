@@ -477,7 +477,11 @@ class quiz_export_engine
             . '<path d="M8 8 L16 16 M16 8 L8 16" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>'
             . '</svg>';
 
-        // Step 0: Normalize whitespace first to ensure regex patterns work correctly.
+        // Step 0a: Remove visually-hidden elements (Bootstrap 5 screen-reader-only class).
+        // mPDF does not reliably support the CSS used by .visually-hidden, so strip them from HTML.
+        $html = preg_replace('/<[^>]+class="[^"]*\bvisually-hidden\b[^"]*"[^>]*>.*?<\/\w+>/is', '', $html);
+
+        // Step 0b: Normalize whitespace first to ensure regex patterns work correctly.
         $html = preg_replace('/>\s+</', '> <', $html);
 
         // Step 1: Flatten MCQ structure BEFORE replacing inputs/icons.

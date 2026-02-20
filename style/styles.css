@@ -11,6 +11,7 @@ body, html, * {
 .editquestion,
 .submitbtns,
 .sr-only.sr-only-focusable,
+.visually-hidden,
 .questionflag {
     display: none !important;
 }
