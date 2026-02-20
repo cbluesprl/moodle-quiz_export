@@ -96,7 +96,7 @@ class quiz_export_engine
         $css .= "\n.que .info { width: 12em; }\n.que .content { margin: 0 0 0 13em; }\n";
         $pdf->WriteHTML($css, \Mpdf\HTMLParserMode::HEADER_CSS);
 
-        $additionnal_informations = html_writer::tag('h3', get_string('documenttitle', 'quiz_export', $parameters_additionnal_informations), ['class' => 'text-center', 'style' => 'margin-bottom: -20px;']);
+        $additionnal_informations = html_writer::tag('h3', get_string('documenttitle', 'quiz_export', $parameters_additionnal_informations), ['class' => 'text-center', 'style' => 'margin-bottom: 10px;']);
 
         $sumgrades = $attemptobj->get_quiz()->sumgrades;
         $percentages = [];
@@ -124,6 +124,7 @@ class quiz_export_engine
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
                 $contentHTML = $this->add_question_percentages($contentHTML, $percentages);
+                $contentHTML = $this->prepareHtmlForPdf($contentHTML);
 
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
@@ -146,6 +147,8 @@ class quiz_export_engine
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
                 $contentHTML = $this->add_question_percentages($contentHTML, $percentages);
+                $contentHTML = $this->prepareHtmlForPdf($contentHTML);
+
                 if ($current_page == 0) {
                     $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
@@ -421,6 +424,138 @@ class quiz_export_engine
             }
             $html = str_replace($matches[1], $matches_content, $html);
         }
+        return $html;
+    }
+
+    /**
+     * Prepare HTML content for PDF rendering by replacing unsupported elements.
+     *
+     * mPDF does not support Font Awesome icons, radio buttons, or checkboxes.
+     * This method replaces them with inline SVG equivalents.
+     *
+     * @param string $html The HTML content.
+     * @return string The HTML prepared for PDF rendering.
+     */
+    protected function prepareHtmlForPdf($html) {
+        // SVG for checked radio button (filled circle).
+        $svgRadioChecked = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" '
+            . 'style="display:inline; vertical-align:middle; margin-right:8px;">'
+            . '<circle cx="8" cy="8" r="7" fill="none" stroke="#666" stroke-width="1.5"/>'
+            . '<circle cx="8" cy="8" r="4" fill="#666"/>'
+            . '</svg>';
+
+        // SVG for unchecked radio button (empty circle).
+        $svgRadioUnchecked = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" '
+            . 'style="display:inline; vertical-align:middle; margin-right:8px;">'
+            . '<circle cx="8" cy="8" r="7" fill="none" stroke="#666" stroke-width="1.5"/>'
+            . '</svg>';
+
+        // SVG for checked checkbox (square with checkmark) - using absolute coordinates for mPDF.
+        $svgCheckboxChecked = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" '
+            . 'style="display:inline; vertical-align:middle; margin-right:8px;">'
+            . '<rect x="1" y="1" width="14" height="14" fill="none" stroke="#666" stroke-width="1.5" rx="2"/>'
+            . '<path d="M4 8 L7 11 L12 5" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+            . '</svg>';
+
+        // SVG for unchecked checkbox (empty square).
+        $svgCheckboxUnchecked = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" '
+            . 'style="display:inline; vertical-align:middle; margin-right:8px;">'
+            . '<rect x="1" y="1" width="14" height="14" fill="none" stroke="#666" stroke-width="1.5" rx="2"/>'
+            . '</svg>';
+
+        // SVG checkmark icon (green circle with check) - using absolute coordinates for mPDF.
+        $svgCorrect = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+            . 'style="display:inline; vertical-align:middle; margin-left:4px;">'
+            . '<circle cx="12" cy="12" r="10" fill="none" stroke="#198754" stroke-width="2"/>'
+            . '<path d="M7 12 L10 15 L17 8" fill="none" stroke="#198754" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+            . '</svg>';
+
+        // SVG cross icon (red circle with X) - using absolute coordinates for mPDF.
+        $svgIncorrect = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+            . 'style="display:inline; vertical-align:middle; margin-left:4px;">'
+            . '<circle cx="12" cy="12" r="10" fill="none" stroke="#dc3545" stroke-width="2"/>'
+            . '<path d="M8 8 L16 16 M16 8 L8 16" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>'
+            . '</svg>';
+
+        // Step 0: Normalize whitespace first to ensure regex patterns work correctly.
+        $html = preg_replace('/>\s+</', '> <', $html);
+
+        // Step 1: Flatten MCQ structure BEFORE replacing inputs/icons.
+        // Remove <p> tags, keep content only.
+        $html = preg_replace('/<p[^>]*>(.*?)<\/p>/is', '$1', $html);
+
+        // Step 2: Replace <div class="flex-fill ...">content</div> with just content.
+        $html = preg_replace(
+            '/<div[^>]*class="[^"]*flex-fill[^"]*"[^>]*>(.*?)<\/div>/is',
+            '$1',
+            $html
+        );
+
+        // Step 3: Replace answer-label div with just content.
+        $html = preg_replace(
+            '/<div[^>]*data-region="answer-label"[^>]*>(.*?)<\/div>/is',
+            '$1',
+            $html
+        );
+
+        // Step 4: Remove .ms-1 span wrapper, keep content.
+        $html = preg_replace(
+            '/<span[^>]*class="[^"]*\bms-1\b[^"]*"[^>]*>(.*?)<\/span>/is',
+            ' $1',
+            $html
+        );
+
+        // Step 5: Add inline style to r0/r1 answer row divs.
+        $html = preg_replace(
+            '/<div([^>]*class="[^"]*\b(r0|r1)\b[^"]*"[^>]*)>/is',
+            '<div$1 style="display:block; margin:5px 0; line-height:1.6;">',
+            $html
+        );
+
+        // NOW replace inputs and icons on the flattened structure.
+
+        // Replace checked radio buttons (add space after for margin).
+        $html = preg_replace(
+            '/<input[^>]*type=["\']radio["\'][^>]*checked[^>]*\/?>/is',
+            $svgRadioChecked . '&nbsp; ',
+            $html
+        );
+
+        // Replace unchecked radio buttons.
+        $html = preg_replace(
+            '/<input[^>]*type=["\']radio["\'][^>]*\/?>/is',
+            $svgRadioUnchecked . '&nbsp; ',
+            $html
+        );
+
+        // Replace checked checkboxes (add space after for margin).
+        $html = preg_replace(
+            '/<input[^>]*type=["\']checkbox["\'][^>]*checked[^>]*\/?>/is',
+            $svgCheckboxChecked . '&nbsp; ',
+            $html
+        );
+
+        // Replace unchecked checkboxes.
+        $html = preg_replace(
+            '/<input[^>]*type=["\']checkbox["\'][^>]*\/?>/is',
+            $svgCheckboxUnchecked . '&nbsp; ',
+            $html
+        );
+
+        // Replace correct answer icons (fa-circle-check with text-success).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*fa-circle-check[^"]*"[^>]*>.*?<\/i>/is',
+            $svgCorrect,
+            $html
+        );
+
+        // Replace incorrect answer icons (fa-circle-xmark with text-danger).
+        $html = preg_replace(
+            '/<i[^>]*class="[^"]*fa-circle-xmark[^"]*"[^>]*>.*?<\/i>/is',
+            $svgIncorrect,
+            $html
+        );
+
         return $html;
     }
 }

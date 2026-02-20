@@ -1,0 +1,57 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Settings for the quiz export report.
+ *
+ * @package   quiz_export
+ * @copyright 2020 CBlue Srl
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die;
+
+if ($ADMIN->fulltree) {
+    $settings->add(new admin_setting_configtext(
+        'quiz_export/timelimit',
+        get_string('timelimit', 'quiz_export'),
+        get_string('timelimitdesc', 'quiz_export'),
+        600,
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'quiz_export/asyncsingle',
+        get_string('asyncsingle', 'quiz_export'),
+        get_string('asyncsingledesc', 'quiz_export'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'quiz_export/asyncbulk',
+        get_string('asyncbulk', 'quiz_export'),
+        get_string('asyncbulkdesc', 'quiz_export'),
+        1
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'quiz_export/retentiondays',
+        get_string('retentiondays', 'quiz_export'),
+        get_string('retentiondaysdesc', 'quiz_export'),
+        30,
+        PARAM_INT
+    ));
+}

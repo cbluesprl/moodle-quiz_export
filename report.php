@@ -51,7 +51,7 @@ class quiz_export_report extends attempts_report
 
     public function display($quiz, $cm, $course)
     {
-        global $OUTPUT;
+        global $OUTPUT, $DB, $USER;
 
         // This inits the quiz_attempts_report (parent class) functionality
         list($currentgroup, $students, $groupstudents, $allowed) =
@@ -140,6 +140,121 @@ class quiz_export_report extends attempts_report
             // Print the table
             $table->out($this->options->pagesize, true);
         }
+
+        // Display previous exports history.
+        if (!$table->is_downloading()) {
+            $this->display_export_history($this->context);
+        }
+    }
+
+    /**
+     * Display the export history table with download links and pending tasks.
+     *
+     * @param \context $context The current module context.
+     */
+    protected function display_export_history(\context $context): void {
+        global $DB, $USER, $OUTPUT;
+
+        // Fetch completed export files.
+        $sql = "SELECT f.id, f.filename, f.filesize, f.timecreated
+                  FROM {files} f
+                 WHERE f.component = :component
+                   AND f.filearea = :filearea
+                   AND f.contextid = :contextid
+                   AND f.userid = :userid
+                   AND f.filename != '.'
+              ORDER BY f.timecreated DESC";
+
+        $params = [
+            'component' => 'quiz_export',
+            'filearea' => 'export',
+            'contextid' => $context->id,
+            'userid' => $USER->id,
+        ];
+
+        $files = $DB->get_records_sql($sql, $params);
+
+        // Fetch pending/running adhoc tasks for this user.
+        $pendingtasks = $this->get_pending_export_tasks($USER->id);
+
+        echo $OUTPUT->heading(get_string('previousexports', 'quiz_export'), 3);
+
+        if (empty($files) && empty($pendingtasks)) {
+            echo $OUTPUT->notification(get_string('noexportsyet', 'quiz_export'), 'info');
+            return;
+        }
+
+        $historytable = new \html_table();
+        $historytable->head = [
+            get_string('exportdate', 'quiz_export'),
+            get_string('exportfilename', 'quiz_export'),
+            get_string('exportfilesize', 'quiz_export'),
+            get_string('exportstatus', 'quiz_export'),
+            '',
+        ];
+        $historytable->attributes['class'] = 'generaltable';
+
+        // Pending/running tasks first.
+        foreach ($pendingtasks as $task) {
+            if (!empty($task->timestarted)) {
+                $statuslabel = get_string('exportstatusinprogress', 'quiz_export');
+                $statusclass = 'badge badge-warning text-dark';
+            } else {
+                $statuslabel = get_string('exportstatuspending', 'quiz_export');
+                $statusclass = 'badge badge-secondary';
+            }
+            $row = [
+                userdate($task->timecreated),
+                \html_writer::tag('em', get_string('exportpending', 'quiz_export')),
+                '-',
+                \html_writer::tag('span', $statuslabel, ['class' => $statusclass]),
+                '',
+            ];
+            $historytable->data[] = $row;
+        }
+
+        // Completed export files.
+        foreach ($files as $file) {
+            $downloadurl = new \moodle_url('/mod/quiz/report/export/download.php', ['fileid' => $file->id]);
+            $statuslabel = get_string('exportstatuscomplete', 'quiz_export');
+            $row = [
+                userdate($file->timecreated),
+                s($file->filename),
+                display_size($file->filesize),
+                \html_writer::tag('span', $statuslabel, ['class' => 'badge badge-success']),
+                \html_writer::link($downloadurl, get_string('downloadexport', 'quiz_export')),
+            ];
+            $historytable->data[] = $row;
+        }
+
+        echo \html_writer::table($historytable);
+    }
+
+    /**
+     * Get pending or running export adhoc tasks for a given user.
+     *
+     * @param int $userid The user ID.
+     * @return array List of pending task records.
+     */
+    protected function get_pending_export_tasks(int $userid): array {
+        global $DB;
+
+        $classnames = [
+            '\\quiz_export\\task\\export_attempts',
+            '\\quiz_export\\task\\export_single_attempt',
+        ];
+
+        list($insql, $inparams) = $DB->get_in_or_equal($classnames, SQL_PARAMS_NAMED);
+
+        $sql = "SELECT id, classname, timecreated, timestarted
+                  FROM {task_adhoc}
+                 WHERE classname {$insql}
+                   AND userid = :userid
+              ORDER BY timecreated DESC";
+
+        $inparams['userid'] = $userid;
+
+        return $DB->get_records_sql($sql, $inparams);
     }
 
     /**
@@ -153,16 +268,35 @@ class quiz_export_report extends attempts_report
      */
     protected function process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $redirecturl)
     {
-        // parent::process_actions($quiz, $cm, $currentgroup, $groupstudents, $allowed, $redirecturl);
+        global $USER;
 
         if (empty($currentgroup) || $groupstudents) {
             if (optional_param('export', 0, PARAM_BOOL) && confirm_sesskey()) {
-                raise_memory_limit(MEMORY_HUGE);
-                set_time_limit(600);
                 if ($attemptids = optional_param_array('attemptid', array(), PARAM_INT)) {
-                    // require_capability('mod/quiz:deleteattempts', $this->context);
-                    $this->export_attempts($quiz, $cm, $attemptids, $allowed);
-                    redirect($redirecturl);
+                    $asyncbulk = get_config('quiz_export', 'asyncbulk');
+
+                    if (!empty($asyncbulk)) {
+                        // Queue an adhoc task for async bulk export.
+                        $task = new \quiz_export\task\export_attempts();
+                        $task->set_custom_data([
+                            'attemptids' => $attemptids,
+                            'pagemode' => $this->options->pagemode,
+                            'userid' => $USER->id,
+                            'cmid' => $cm->id,
+                        ]);
+                        $task->set_userid($USER->id);
+                        \core\task\manager::queue_adhoc_task($task);
+
+                        redirect($redirecturl, get_string('exportqueued', 'quiz_export'), null,
+                            \core\output\notification::NOTIFY_SUCCESS);
+                    } else {
+                        // Synchronous export (original behaviour).
+                        raise_memory_limit(MEMORY_HUGE);
+                        $timelimit = get_config('quiz_export', 'timelimit');
+                        set_time_limit($timelimit !== false ? (int) $timelimit : 600);
+                        $this->export_attempts($quiz, $cm, $attemptids, $allowed);
+                        redirect($redirecturl);
+                    }
                 }
             }
         }

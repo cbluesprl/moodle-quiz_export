@@ -15,18 +15,23 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Quiz export report version information.
+ * Scheduled tasks definition for quiz_export.
  *
  * @package   quiz_export
  * @copyright 2020 CBlue Srl
- * @copyright based on work by 2014 Johannes Burk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026021703;
-$plugin->requires = 2022041900;
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = '4.0.0 (Build 2024081600)';
-$plugin->component = 'quiz_export';
+$tasks = [
+    [
+        'classname' => 'quiz_export\task\cleanup_exports',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => '3',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+    ],
+];

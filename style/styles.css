@@ -2617,3 +2617,48 @@ button.bg-gray:hover,
 button.bg-gray:focus {
     background-color: #cbd3da !important;
 }
+
+/* ===========================================
+   PDF Export - mPDF compatibility fixes
+   mPDF does not support flexbox, so we override
+   Bootstrap's d-flex with inline display
+   =========================================== */
+
+/* Ensure answer rows display as blocks with proper spacing */
+.que.multichoice .answer div.r0,
+.que.multichoice .answer div.r1 {
+    display: block;
+    margin: 6px 0;
+    padding: 4px 0;
+}
+
+/* Override flexbox for answer labels - force inline */
+.que.multichoice .answer .d-flex,
+.que.multichoice .answer [data-region="answer-label"] {
+    display: inline !important;
+}
+
+/* Answer number inline */
+.que.multichoice .answer .answernumber {
+    display: inline !important;
+    margin-right: 4px;
+}
+
+/* Answer text container inline */
+.que.multichoice .answer .flex-fill,
+.que.multichoice .answer .ms-1 {
+    display: inline !important;
+}
+
+/* Force paragraphs inside answers to be inline */
+.que.multichoice .answer p {
+    display: inline !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* SVG icons inline alignment */
+.que.multichoice .answer svg {
+    display: inline !important;
+    vertical-align: middle;
+}
