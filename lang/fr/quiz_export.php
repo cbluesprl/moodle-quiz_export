@@ -25,6 +25,7 @@
 
 $string['pluginname'] = 'QuizExport';
 $string['export'] = 'Export de quiz'; // displayed in the navigation menu
+$string['exportreport'] = 'Paramètres QuizExport'; // displayed in the admin menu
 
 $string['exportselected'] = 'Exporter les tentatives sélectionnées';
 
