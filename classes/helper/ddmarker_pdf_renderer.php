@@ -103,7 +103,62 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
             . $svgcontent
             . '</svg></div>';
 
-        return $this->replace_div_with_class('ddarea', $svgblock);
+        $unplacedcontents = array_map(
+            fn($drag) => htmlspecialchars(
+                strip_tags((string) $drag->text),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8'
+            ),
+            $this->collect_unplaced_choices()
+        );
+        $unplacedhtml = $this->render_unplaced_section($unplacedcontents);
+
+        return $this->replace_div_with_class('ddarea', $svgblock . $unplacedhtml);
+    }
+
+    /**
+     * Identify the marker labels that the student did not drop anywhere on
+     * the image. A choice is considered placed when its c{choiceno} qt_var
+     * holds at least one parseable "x,y" pair.
+     *
+     * @return array<int, object> Drag descriptors as returned by get_ordered_choices.
+     */
+    private function collect_unplaced_choices(): array {
+        $question = $this->questionattempt->get_question();
+        $orderedchoices = $question->get_ordered_choices(1);
+        if (empty($orderedchoices)) {
+            // Fallback when choiceorder isn't initialised on the question.
+            $orderedchoices = $question->choices[1] ?? [];
+        }
+
+        $unplaced = [];
+        foreach ($orderedchoices as $choiceno => $drag) {
+            if (!$this->is_choice_placed((int) $choiceno)) {
+                $unplaced[] = $drag;
+            }
+        }
+        return $unplaced;
+    }
+
+    /**
+     * Whether a choice has at least one valid (x,y) placement recorded.
+     */
+    private function is_choice_placed(int $choiceno): bool {
+        $coordstring = (string) $this->questionattempt->get_last_qt_var('c' . $choiceno);
+        if (trim($coordstring) === '') {
+            return false;
+        }
+        foreach (explode(';', $coordstring) as $rawcoord) {
+            $rawcoord = trim($rawcoord);
+            if ($rawcoord === '') {
+                continue;
+            }
+            $xy = explode(',', $rawcoord);
+            if (count($xy) === 2 && is_numeric($xy[0]) && is_numeric($xy[1])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

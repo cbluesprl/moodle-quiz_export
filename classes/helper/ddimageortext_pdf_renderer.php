@@ -136,7 +136,14 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . $svgcontent
             . '</svg></div>';
 
-        return $this->replace_div_with_class('ddarea', $svgblock);
+        $unplacedchoices = $this->collect_unplaced_choices($places, $responses);
+        $unplacedcontents = array_map(
+            fn($entry) => $this->build_unplaced_pill_content($entry['choice']),
+            $unplacedchoices
+        );
+        $unplacedhtml = $this->render_unplaced_section($unplacedcontents);
+
+        return $this->replace_div_with_class('ddarea', $svgblock . $unplacedhtml);
     }
 
     /**
@@ -468,5 +475,85 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             return false;
         }
         return ((int) $rightchoice) === $responsevalue;
+    }
+
+    /**
+     * Determine which choices the student did not drop on the image.
+     *
+     * Identification key: the array key in $question->choices[$group], which
+     * per qtype_ddimageortext_base::initialise_question_instance() is the
+     * dragdata->no (1 for the first item in a group, then increasing) — NOT
+     * the choice DB id. The response value is a choiceorder index that maps
+     * back to that same array key.
+     *
+     * Falls back to using the response value directly when choiceorder isn't
+     * initialised on the question (observed when the question is loaded with
+     * lazy initialisation). This mirrors resolve_choice() so the unplaced
+     * computation stays consistent with how the dropzones are rendered.
+     *
+     * @param array<int, array{group:int,xy:array{0:int,1:int}}> $places
+     * @param array<int, int> $responses
+     * @return array<int, array{group:int, choice:object}>
+     */
+    private function collect_unplaced_choices(array $places, array $responses): array {
+        $question = $this->questionattempt->get_question();
+        if (empty($question->choices)) {
+            return [];
+        }
+
+        $usedchoicekeys = [];
+        foreach ($responses as $placeno => $responsevalue) {
+            if ($responsevalue === 0 || !isset($places[$placeno])) {
+                continue;
+            }
+            $group = (int) $places[$placeno]['group'];
+            $choicekey = $this->resolve_choice_key($group, $responsevalue);
+            if ($choicekey === null) {
+                continue;
+            }
+            $usedchoicekeys[$group][$choicekey] = true;
+        }
+
+        $unplaced = [];
+        foreach ($question->choices as $groupid => $groupchoices) {
+            $groupid = (int) $groupid;
+            foreach ($groupchoices as $choicekey => $choice) {
+                if (isset($usedchoicekeys[$groupid][(int) $choicekey])) {
+                    continue;
+                }
+                $unplaced[] = ['group' => $groupid, 'choice' => $choice];
+            }
+        }
+        return $unplaced;
+    }
+
+    /**
+     * Resolve a response value to the array key it points to in
+     * $question->choices[$group]. Mirrors resolve_choice() but returns the
+     * key instead of the choice object.
+     */
+    private function resolve_choice_key(int $groupno, int $responsevalue): ?int {
+        $question = $this->questionattempt->get_question();
+        if (isset($question->choiceorder[$groupno][$responsevalue])) {
+            return (int) $question->choiceorder[$groupno][$responsevalue];
+        }
+        if (isset($question->choices[$groupno][$responsevalue])) {
+            return $responsevalue;
+        }
+        return null;
+    }
+
+    /**
+     * Build the inner HTML for an unplaced choice's pill: image thumbnail
+     * for image-typed choices, plain escaped text otherwise.
+     */
+    private function build_unplaced_pill_content($choice): string {
+        $info = !empty($choice->id) ? $this->get_image_info('dragimage', (int) $choice->id) : null;
+        if ($info !== null) {
+            return '<img src="' . $info['data'] . '" '
+                . 'style="max-height:24pt; vertical-align:middle;" alt=""/>';
+        }
+        $label = strip_tags((string) ($choice->text ?? ''));
+        return htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }

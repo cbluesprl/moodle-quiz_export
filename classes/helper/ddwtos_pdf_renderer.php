@@ -70,9 +70,40 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
 
         $this->ensure_choiceorder_initialised();
 
+        $unplacedhtml = $this->render_unplaced_section(
+            $this->collect_unplaced_choice_contents($responses, $choices)
+        );
+
         $html = $this->fill_drop_zones($this->questionhtml, $responses, $choices);
-        $html = $this->strip_drag_homes_container($html);
+        $html = $this->replace_drag_homes_container($html, $unplacedhtml);
         return $html;
+    }
+
+    /**
+     * Identify the draghome labels that were never used in any response and
+     * return their visible HTML, ready to be wrapped in unplaced pills.
+     *
+     * @param array<int, array{group:int, value:int}> $responses
+     * @param array<string, string> $choices Keyed by "group{G}-choice{N}".
+     * @return array<int, string>
+     */
+    private function collect_unplaced_choice_contents(array $responses, array $choices): array {
+        $usedkeys = [];
+        foreach ($responses as $response) {
+            if ((int) $response['value'] === 0) {
+                continue;
+            }
+            $usedkeys['group' . $response['group'] . '-choice' . $response['value']] = true;
+        }
+
+        $unplaced = [];
+        foreach ($choices as $key => $labelhtml) {
+            if (isset($usedkeys[$key])) {
+                continue;
+            }
+            $unplaced[] = $labelhtml;
+        }
+        return $unplaced;
     }
 
     /**
@@ -207,17 +238,20 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Remove the answercontainer block (the available drag labels listed
-     * below the question text) from the HTML so the PDF only shows the
-     * filled-in sentence.
+     * Replace the answercontainer block (the available drag labels listed
+     * below the question text by Moodle's runtime renderer) by the given
+     * static content. Keeping this position means the unplaced labels appear
+     * inside the formulation block (the coloured response panel) rather than
+     * after the question's response history.
      *
      * @param string $html Source HTML.
-     * @return string HTML without the drag homes container.
+     * @param string $replacement HTML to inject in place of the container.
+     * @return string Transformed HTML.
      */
-    private function strip_drag_homes_container(string $html): string {
+    private function replace_drag_homes_container(string $html, string $replacement): string {
         $pattern = '#<div\b[^>]*\bclass="[^"]*\banswercontainer\b[^"]*"[^>]*>.*?</div>\s*#is';
-        $stripped = preg_replace($pattern, '', $html);
-        return $stripped !== null ? $stripped : $html;
+        $replaced = preg_replace_callback($pattern, fn() => $replacement, $html, 1);
+        return $replaced !== null ? $replaced : $html;
     }
 
     /**

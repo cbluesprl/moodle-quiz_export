@@ -329,4 +329,43 @@ abstract class abstract_qtype_pdf_renderer {
     protected function svg_escape(string $value): string {
         return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
+
+    /**
+     * Render the "unplaced labels" section: a centered block with a heading
+     * and a row of bordered pills, each containing the supplied inner HTML.
+     *
+     * Subclasses are responsible for computing the unplaced contents in their
+     * own format (qtype-specific) and passing them as already-safe HTML
+     * fragments (text choices must be htmlspecialchars-escaped first).
+     *
+     * @param array<int, string> $innercontents Pre-built HTML to wrap in pills.
+     * @return string Section HTML, or empty string when nothing to display.
+     */
+    protected function render_unplaced_section(array $innercontents): string {
+        if (empty($innercontents)) {
+            return '';
+        }
+        $pillstyle = 'display:inline-block; padding:3pt 8pt; '
+            . 'border:1px solid #999; border-radius:4px; '
+            . 'margin:4pt 8pt; background:#f5f5f5; '
+            . 'font-family: Helvetica, Arial, sans-serif; font-size:10pt;';
+        $pills = [];
+        foreach ($innercontents as $inner) {
+            $pills[] = '<span style="' . $pillstyle . '">' . $inner . '</span>';
+        }
+        // mPDF can collapse margins on adjacent inline-blocks; an explicit
+        // separator guarantees a visible gap between consecutive pills.
+        $separator = '&nbsp;&nbsp;';
+        $heading = htmlspecialchars(
+            get_string('unplacedlabels', 'quiz_export'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        return '<div class="quiz_export-dd-unplaced" '
+            . 'style="margin-top:8pt; text-align:center;">'
+            . '<div style="font-weight:bold; color:#555; margin-bottom:4pt;">'
+            . $heading . '</div>'
+            . implode($separator, $pills)
+            . '</div>';
+    }
 }

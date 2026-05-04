@@ -85,3 +85,4 @@ $string['taskcleanupexports'] = 'Bereinigung abgelaufener Testexport-Dateien';
 
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Zusammenfassung des Versuchs von {$a->firstname} {$a->lastname}';
+$string['unplacedlabels'] = 'Nicht platzierte Etiketten:';
