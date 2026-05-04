@@ -161,6 +161,58 @@ abstract class abstract_qtype_pdf_renderer {
     }
 
     /**
+     * Replace, in $this->questionhtml, the first <div> whose class attribute
+     * contains the given class token by the supplied replacement HTML.
+     *
+     * Uses a depth-aware scan to handle nested <div> inside the targeted
+     * block. The surrounding HTML (in particular the .info and .outcome
+     * blocks emitted by Moodle's question renderer chrome) is preserved.
+     *
+     * @param string $classname Bare class token to match (e.g. "ddarea").
+     * @param string $replacement HTML to inject in place of the matched div.
+     * @return string The modified HTML; original HTML when the div is not found.
+     */
+    protected function replace_div_with_class(string $classname, string $replacement): string {
+        $html = $this->questionhtml;
+        $pattern = '#<div\b[^>]*\bclass="(?:[^"]*\s)?'
+            . preg_quote($classname, '#')
+            . '(?:\s[^"]*)?"#';
+        if (!preg_match($pattern, $html, $match, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $tagstart = $match[0][1];
+
+        $cursor = $tagstart;
+        $depth = 0;
+        $length = strlen($html);
+        while ($cursor < $length) {
+            $next = strpos($html, '<', $cursor);
+            if ($next === false) {
+                return $html;
+            }
+            $opening = substr($html, $next, 4) === '<div';
+            $closing = substr($html, $next, 6) === '</div>';
+            if ($opening) {
+                $depth++;
+                $cursor = $next + 4;
+                continue;
+            }
+            if ($closing) {
+                $depth--;
+                $cursor = $next + 6;
+                if ($depth === 0) {
+                    return substr($html, 0, $tagstart)
+                        . $replacement
+                        . substr($html, $cursor);
+                }
+                continue;
+            }
+            $cursor = $next + 1;
+        }
+        return $html;
+    }
+
+    /**
      * Resolve the natural pixel size of the background image.
      *
      * @return array{0:int,1:int} Width and height in pixels (zeros when unknown).

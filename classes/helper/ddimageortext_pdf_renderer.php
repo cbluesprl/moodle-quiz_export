@@ -121,8 +121,7 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             $svgcontent .= $this->render_dropzone($placeno, $place, $responses, $groupdims, $canvas);
         }
 
-        return $this->extract_qtext_html()
-            . '<div class="quiz_export-dd-svg" style="text-align:center;">'
+        $svgblock = '<div class="quiz_export-dd-svg" style="text-align:center;">'
             . '<svg xmlns="http://www.w3.org/2000/svg" '
             . 'xmlns:xlink="http://www.w3.org/1999/xlink" '
             . 'viewBox="0 0 ' . $canvas['totalw'] . ' ' . $canvas['totalh'] . '" '
@@ -130,6 +129,8 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . 'preserveAspectRatio="xMidYMid meet">'
             . $svgcontent
             . '</svg></div>';
+
+        return $this->replace_div_with_class('ddarea', $svgblock);
     }
 
     /**
