@@ -93,6 +93,12 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
     /** @var string Text colour used for label content. */
     private const TEXT_COLOR = '#cc6600';
 
+    /** @var float Maximum size of the bottom-right correctness badge, in canvas points. */
+    private const CORRECTNESS_ICON_SIZE_PT = 8.0;
+
+    /** @var float Inset of the badge from the drop zone's bottom-right corner. */
+    private const CORRECTNESS_ICON_INSET_PT = 3.0;
+
     public function render_for_pdf(): string {
         $bgimagedata = $this->get_image_data_uri('bgimage', $this->get_question_id());
         if ($bgimagedata === null) {
@@ -197,16 +203,49 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
         }
 
         $choice = $this->resolve_choice($group, $responsevalue);
-        if ($choice === null) {
-            return $svg;
+        if ($choice !== null) {
+            $svg .= $this->render_choice_inside_dropzone(
+                $choice,
+                $dzleft, $dztop, $dzwidth, $dzheight,
+                $canvas['scale']
+            );
         }
 
-        $svg .= $this->render_choice_inside_dropzone(
-            $choice,
-            $dzleft, $dztop, $dzwidth, $dzheight,
-            $canvas['scale']
+        $svg .= $this->build_corner_correctness_badge(
+            $iscorrect,
+            $dzleft, $dztop, $dzwidth, $dzheight
         );
         return $svg;
+    }
+
+    /**
+     * Build a small check / cross badge in the drop zone's bottom-right
+     * corner so correctness is conveyed by shape, not colour alone (WCAG 1.4.1
+     * — also useful for black-and-white printing).
+     *
+     * The badge consists of a white-filled circle with a coloured stroke
+     * matching the border colour, plus the check / cross path centred inside.
+     */
+    private function build_corner_correctness_badge(
+        bool $iscorrect,
+        float $dzleft,
+        float $dztop,
+        float $dzwidth,
+        float $dzheight
+    ): string {
+        $iconsize = min(self::CORRECTNESS_ICON_SIZE_PT, $dzwidth * 0.4, $dzheight * 0.55);
+        $inset = min(self::CORRECTNESS_ICON_INSET_PT, $iconsize * 0.45);
+        $cx = $dzleft + $dzwidth - $inset - ($iconsize / 2);
+        $cy = $dztop + $dzheight - $inset - ($iconsize / 2);
+        $color = $iscorrect ? self::BORDER_CORRECT : self::BORDER_INCORRECT;
+        $bgradius = $iconsize * 0.7;
+
+        $background = '<circle cx="' . $cx . '" cy="' . $cy . '" '
+            . 'r="' . $bgradius . '" '
+            . 'fill="#ffffff" '
+            . 'stroke="' . $color . '" stroke-width="0.8"/>';
+
+        return $background . $this->build_correctness_svg($iscorrect, $cx, $cy, $iconsize);
     }
 
     /**
