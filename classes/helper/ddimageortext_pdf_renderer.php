@@ -29,102 +29,61 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Render ddimageortext (drag-and-drop onto image) questions for PDF export.
  *
- * Key design choices:
- *  - The background image is rendered on a fixed-size canvas (480pt wide
- *    + 60pt padding all around) regardless of the source image dimensions,
- *    so every PDF looks consistent.
- *  - Each drop zone is drawn at its real position with a translucent fill,
- *    so the underlying image stays visible. Border colour reflects
- *    correctness (green/red) or absence of response (grey).
- *  - The dropped item (text or image) renders inside the drop zone, centred
- *    and constrained to the zone bounds: text auto-fits, images preserve
- *    their aspect ratio.
- *  - Text labels longer than 16 characters are truncated with an ellipsis.
- *
- * Drop zone dimensions are computed per group: for each group of choices,
- * the zone size is the max bounding box needed by any choice in the group
- * (mirroring Moodle's runtime "resize all in group" JS behaviour).
+ * Reads positions, choices and responses from the question API ($question->places,
+ * $question->choices, $question->get_ordered_choices(), $qa->get_last_qt_data()),
+ * then composes a static SVG that mirrors what Moodle's runtime JS would produce
+ * during a live attempt review.
  */
 class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
 
-    /** @var float Image render width inside the canvas, in points. */
     private const IMAGE_WIDTH_PT = 480.0;
-
-    /** @var float Padding around the image inside the canvas, in points. */
     private const CANVAS_PADDING_PT = 60.0;
-
-    /** @var float Default font size for choice labels in canvas points. */
     private const BASE_FONT_PT = 12.0;
-
-    /** @var float Minimum font size for auto-fit before truncation kicks in. */
     private const MIN_FONT_PT = 7.5;
-
-    /** @var int Maximum label length before truncation with ellipsis. */
     private const MAX_LABEL_CHARS = 16;
-
-    /** @var float Inner horizontal padding inside a drop zone. */
     private const DROPZONE_PADDING_X = 4.0;
-
-    /** @var float Inner vertical padding inside a drop zone. */
     private const DROPZONE_PADDING_Y = 3.0;
-
-    /** @var float Average character width as a fraction of font size. */
     private const CHAR_WIDTH_RATIO = 0.55;
-
-    /** @var float Minimum drop zone width and height. */
     private const MIN_DROPZONE_WIDTH = 32.0;
     private const MIN_DROPZONE_HEIGHT = 18.0;
-
-    /** @var string Border colour when the response is correct. */
     private const BORDER_CORRECT = '#2a8a2a';
-
-    /** @var string Border colour when the response is incorrect. */
     private const BORDER_INCORRECT = '#c83737';
-
-    /** @var string Border colour for empty drop zones. */
     private const BORDER_NEUTRAL = '#888888';
-
-    /** @var float Drop zone border stroke width. */
     private const BORDER_WIDTH_PT = 2.0;
-
-    /** @var string Translucent fill colour for drop zones. */
     private const DROPZONE_FILL = 'rgba(255, 255, 255, 0.5)';
-
-    /** @var string Text colour used for label content. */
     private const TEXT_COLOR = '#cc6600';
-
-    /** @var float Maximum size of the bottom-right correctness badge, in canvas points. */
     private const CORRECTNESS_ICON_SIZE_PT = 8.0;
-
-    /** @var float Inset of the badge from the drop zone's bottom-right corner. */
     private const CORRECTNESS_ICON_INSET_PT = 3.0;
 
     public function render_for_pdf(): string {
-        $bgimagedata = $this->get_image_data_uri('bgimage', $this->get_question_id());
+        $this->ensure_question_state_applied();
+
+        $question = $this->questionattempt->get_question();
+        if (empty($question->places) || empty($question->choices)) {
+            return $this->questionhtml;
+        }
+
+        $bgimagedata = $this->get_image_data_uri('bgimage', $question->id);
         if ($bgimagedata === null) {
             return $this->questionhtml;
         }
 
-        list($imagewidth, $imageheight) = $this->get_background_image_size();
+        [$imagewidth, $imageheight] = $this->get_background_image_size();
         if ($imagewidth === 0 || $imageheight === 0) {
             return $this->questionhtml;
         }
 
-        $places = $this->extract_places_from_html();
-        $responses = $this->extract_responses_from_html();
-        if (empty($places)) {
-            return $this->questionhtml;
-        }
-
-        $this->ensure_choiceorder_initialised();
-
+        $responses = $this->collect_responses();
         $canvas = $this->build_canvas_geometry($imagewidth, $imageheight);
         $svgcontent = $this->build_background_svg($bgimagedata, $canvas);
-
         $groupdims = $this->compute_group_dropzone_dimensions($canvas['scale']);
 
-        foreach ($places as $placeno => $place) {
-            $svgcontent .= $this->render_dropzone($placeno, $place, $responses, $groupdims, $canvas);
+        foreach ($question->places as $placeno => $place) {
+            $svgcontent .= $this->render_dropzone(
+                (int) $placeno, $place,
+                $responses[$placeno] ?? 0,
+                $groupdims, $canvas
+            );
         }
 
         $svgblock = '<div class="quiz_export-dd-svg" style="text-align:center;">'
@@ -136,26 +95,29 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . $svgcontent
             . '</svg></div>';
 
-        $unplacedchoices = $this->collect_unplaced_choices($places, $responses);
-        $unplacedcontents = array_map(
-            fn($entry) => $this->build_unplaced_pill_content($entry['choice']),
-            $unplacedchoices
+        $unplacedhtml = $this->render_unplaced_section(
+            $this->build_unplaced_pill_contents($responses)
         );
-        $unplacedhtml = $this->render_unplaced_section($unplacedcontents);
 
         return $this->replace_div_with_class('ddarea', $svgblock . $unplacedhtml);
     }
 
     /**
-     * Produce the canvas geometry: total dimensions, image placement and the
-     * scale factor to convert original image pixels into canvas points.
+     * Read each place's response value, mirroring the per-field lookup
+     * Moodle's own ddimageortext renderer performs.
      *
-     * @return array{
-     *     totalw:float, totalh:float,
-     *     imgx:float, imgy:float, imgw:float, imgh:float,
-     *     padding:float, scale:float
-     * }
+     * @return array<int, int> Map placeno => choiceorder index (0 means "no response").
      */
+    private function collect_responses(): array {
+        $question = $this->questionattempt->get_question();
+        $responses = [];
+        foreach ($question->places as $placeno => $unused) {
+            $value = $this->questionattempt->get_last_qt_var($question->field($placeno));
+            $responses[(int) $placeno] = $value !== null ? (int) $value : 0;
+        }
+        return $responses;
+    }
+
     private function build_canvas_geometry(int $imagewidth, int $imageheight): array {
         $imgw = self::IMAGE_WIDTH_PT;
         $imgh = ($imageheight / $imagewidth) * $imgw;
@@ -179,23 +141,26 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . 'xlink:href="' . $bgimagedata . '" />';
     }
 
-    /**
-     * Render a single drop zone (rectangle + chosen content if any).
-     */
-    private function render_dropzone(int $placeno, array $place, array $responses, array $groupdims, array $canvas): string {
-        $group = (int) $place['group'];
+    private function render_dropzone(
+        int $placeno,
+        $place,
+        int $responsevalue,
+        array $groupdims,
+        array $canvas
+    ): string {
+        $group = (int) $place->group;
         $dims = $groupdims[$group] ?? ['width' => self::MIN_DROPZONE_WIDTH, 'height' => self::MIN_DROPZONE_HEIGHT];
         $dzwidth = $dims['width'];
         $dzheight = $dims['height'];
 
-        $dzleft = $canvas['imgx'] + ((float) ($place['xy'][0] ?? 0) * $canvas['scale']);
-        $dztop = $canvas['imgy'] + ((float) ($place['xy'][1] ?? 0) * $canvas['scale']);
+        $dzleft = $canvas['imgx'] + ((float) ($place->xy[0] ?? 0) * $canvas['scale']);
+        $dztop = $canvas['imgy'] + ((float) ($place->xy[1] ?? 0) * $canvas['scale']);
 
-        $responsevalue = (int) ($responses[$placeno] ?? 0);
+        $iscorrect = false;
         if ($responsevalue === 0) {
             $bordercolor = self::BORDER_NEUTRAL;
         } else {
-            $iscorrect = $this->is_choice_correct($placeno, $responsevalue);
+            $iscorrect = $this->is_correct_response($placeno, $responsevalue);
             $bordercolor = $iscorrect ? self::BORDER_CORRECT : self::BORDER_INCORRECT;
         }
 
@@ -226,12 +191,26 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
+     * Whether the student's response for a place matches the expected choice.
+     */
+    private function is_correct_response(int $placeno, int $responsevalue): bool {
+        $question = $this->questionattempt->get_question();
+        return (int) $question->get_right_choice_for($placeno) === $responsevalue;
+    }
+
+    /**
+     * Resolve a response value to the actual choice object via Moodle's
+     * shuffled choice order.
+     */
+    private function resolve_choice(int $group, int $responsevalue) {
+        $question = $this->questionattempt->get_question();
+        $ordered = $question->get_ordered_choices($group);
+        return $ordered[$responsevalue] ?? null;
+    }
+
+    /**
      * Build a small check / cross badge in the drop zone's bottom-right
-     * corner so correctness is conveyed by shape, not colour alone (WCAG 1.4.1
-     * — also useful for black-and-white printing).
-     *
-     * The badge consists of a white-filled circle with a coloured stroke
-     * matching the border colour, plus the check / cross path centred inside.
+     * corner so correctness is conveyed by shape, not colour alone (WCAG 1.4.1).
      */
     private function build_corner_correctness_badge(
         bool $iscorrect,
@@ -259,22 +238,18 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
      * Compute drop zone dimensions per group, sized to the largest content
      * any choice in that group needs to render.
      *
-     * @param float $scale Source pixel to canvas point scale factor.
      * @return array<int, array{width:float, height:float}>
      */
     private function compute_group_dropzone_dimensions(float $scale): array {
         $dimensions = [];
         $question = $this->questionattempt->get_question();
-        if (empty($question->choices)) {
-            return $dimensions;
-        }
 
         foreach ($question->choices as $groupid => $choices) {
             $maxw = self::MIN_DROPZONE_WIDTH;
             $maxh = self::MIN_DROPZONE_HEIGHT;
 
             foreach ($choices as $choice) {
-                list($contentw, $contenth) = $this->measure_choice($choice, $scale);
+                [$contentw, $contenth] = $this->measure_choice($choice, $scale);
                 $maxw = max($maxw, $contentw + (self::DROPZONE_PADDING_X * 2));
                 $maxh = max($maxh, $contenth + (self::DROPZONE_PADDING_Y * 2));
             }
@@ -285,8 +260,6 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Measure the bounding size required to display a choice (text or image).
-     *
      * @return array{0:float, 1:float} Width and height in canvas points.
      */
     private function measure_choice($choice, float $scale): array {
@@ -300,11 +273,14 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
         return [$textwidth, $textheight];
     }
 
-    /**
-     * Render the content of a chosen item inside its drop zone (centred,
-     * fitted to the zone's inner area).
-     */
-    private function render_choice_inside_dropzone($choice, float $dzleft, float $dztop, float $dzwidth, float $dzheight, float $scale): string {
+    private function render_choice_inside_dropzone(
+        $choice,
+        float $dzleft,
+        float $dztop,
+        float $dzwidth,
+        float $dzheight,
+        float $scale
+    ): string {
         $info = !empty($choice->id) ? $this->get_image_info('dragimage', (int) $choice->id) : null;
         if ($info !== null) {
             return $this->render_image_in_dropzone($info, $dzleft, $dztop, $dzwidth, $dzheight, $scale);
@@ -313,11 +289,14 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
         return $this->render_text_in_dropzone($label, $dzleft, $dztop, $dzwidth, $dzheight);
     }
 
-    /**
-     * Center an image inside the drop zone, scaled down to fit while
-     * preserving its aspect ratio.
-     */
-    private function render_image_in_dropzone(array $info, float $dzleft, float $dztop, float $dzwidth, float $dzheight, float $scale): string {
+    private function render_image_in_dropzone(
+        array $info,
+        float $dzleft,
+        float $dztop,
+        float $dzwidth,
+        float $dzheight,
+        float $scale
+    ): string {
         $availw = max(1.0, $dzwidth - (self::DROPZONE_PADDING_X * 2));
         $availh = max(1.0, $dzheight - (self::DROPZONE_PADDING_Y * 2));
         $srcw = $info['width'] * $scale;
@@ -336,11 +315,13 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . 'href="' . $info['data'] . '" xlink:href="' . $info['data'] . '" />';
     }
 
-    /**
-     * Render a text label centered in the drop zone with a font size that
-     * fits the available area.
-     */
-    private function render_text_in_dropzone(string $label, float $dzleft, float $dztop, float $dzwidth, float $dzheight): string {
+    private function render_text_in_dropzone(
+        string $label,
+        float $dzleft,
+        float $dztop,
+        float $dzwidth,
+        float $dzheight
+    ): string {
         $availw = max(1.0, $dzwidth - (self::DROPZONE_PADDING_X * 2));
         $availh = max(1.0, $dzheight - (self::DROPZONE_PADDING_Y * 2));
         $charcount = max(1, mb_strlen($label));
@@ -363,10 +344,6 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . '</text>';
     }
 
-    /**
-     * Trim the label to MAX_LABEL_CHARS characters, appending a horizontal
-     * ellipsis when truncation occurs.
-     */
     private function truncate_label(string $label): string {
         if (mb_strlen($label) <= self::MAX_LABEL_CHARS) {
             return $label;
@@ -375,178 +352,40 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Read drop zone descriptors from data-place-info JSON in the HTML.
+     * Build the inner HTML for each unplaced choice's pill.
      *
-     * @return array<int, array{group:int, xy:array{0:int,1:int}}>
+     * @param array<int, int> $responses Map placeno => choiceorder index.
+     * @return array<int, string>
      */
-    private function extract_places_from_html(): array {
-        if (!preg_match('#\bdata-place-info=("|\')(.*?)\1#is', $this->questionhtml, $matches)) {
-            return [];
-        }
-        $json = html_entity_decode($matches[2], ENT_QUOTES | ENT_HTML5);
-        $decoded = json_decode($json, true);
-        if (!is_array($decoded)) {
-            return [];
-        }
-        $places = [];
-        foreach ($decoded as $key => $entry) {
-            if (!is_array($entry) || !isset($entry['xy']) || !is_array($entry['xy'])) {
-                continue;
-            }
-            $placeno = isset($entry['no']) ? (int) $entry['no'] : (int) $key;
-            $places[$placeno] = [
-                'group' => isset($entry['group']) ? (int) $entry['group'] : 1,
-                'xy' => [(int) $entry['xy'][0], (int) $entry['xy'][1]],
-            ];
-        }
-        return $places;
-    }
-
-    /**
-     * Read response values from the placeinput hidden inputs.
-     *
-     * @return array<int, int>
-     */
-    private function extract_responses_from_html(): array {
-        $responses = [];
-        if (!preg_match_all('#<input\b[^>]*\bclass="[^"]*\bplaceinput\b[^"]*"[^>]*>#is',
-                $this->questionhtml, $matches)) {
-            return $responses;
-        }
-        foreach ($matches[0] as $tag) {
-            if (!preg_match('#\bclass="([^"]*)"#i', $tag, $classmatch)) {
-                continue;
-            }
-            if (!preg_match('#\bplace(\d+)\b#', $classmatch[1], $placematch)) {
-                continue;
-            }
-            $value = 0;
-            if (preg_match('#\bvalue="([^"]*)"#i', $tag, $valuematch)) {
-                $value = (int) $valuematch[1];
-            }
-            $responses[(int) $placematch[1]] = $value;
-        }
-        return $responses;
-    }
-
-    /**
-     * Defensive fallback: if the question was lazily fetched without
-     * apply_attempt_state(), choiceorder may be empty. Apply the first step
-     * so resolve_choice() and get_right_choice_for() return consistent data.
-     */
-    private function ensure_choiceorder_initialised(): void {
+    private function build_unplaced_pill_contents(array $responses): array {
         $question = $this->questionattempt->get_question();
-        if (!empty($question->choiceorder)) {
-            return;
-        }
-        if (!method_exists($question, 'apply_attempt_state')) {
-            return;
-        }
-        try {
-            $firststep = $this->questionattempt->get_step(0);
-            $question->apply_attempt_state($firststep);
-        } catch (\Throwable $exception) {
-            debugging('quiz_export ddimageortext: choiceorder fallback failed: '
-                . $exception->getMessage(), DEBUG_DEVELOPER);
-        }
-    }
 
-    private function resolve_choice(int $groupno, int $responsevalue) {
-        $question = $this->questionattempt->get_question();
-        if (isset($question->choiceorder[$groupno][$responsevalue])) {
-            $choiceid = $question->choiceorder[$groupno][$responsevalue];
-            if (isset($question->choices[$groupno][$choiceid])) {
-                return $question->choices[$groupno][$choiceid];
-            }
-        }
-        if (isset($question->choices[$groupno][$responsevalue])) {
-            return $question->choices[$groupno][$responsevalue];
-        }
-        return null;
-    }
-
-    private function is_choice_correct(int $placeno, int $responsevalue): bool {
-        $question = $this->questionattempt->get_question();
-        if (!method_exists($question, 'get_right_choice_for')) {
-            return false;
-        }
-        $rightchoice = $question->get_right_choice_for($placeno);
-        if ($rightchoice === null) {
-            return false;
-        }
-        return ((int) $rightchoice) === $responsevalue;
-    }
-
-    /**
-     * Determine which choices the student did not drop on the image.
-     *
-     * Identification key: the array key in $question->choices[$group], which
-     * per qtype_ddimageortext_base::initialise_question_instance() is the
-     * dragdata->no (1 for the first item in a group, then increasing) — NOT
-     * the choice DB id. The response value is a choiceorder index that maps
-     * back to that same array key.
-     *
-     * Falls back to using the response value directly when choiceorder isn't
-     * initialised on the question (observed when the question is loaded with
-     * lazy initialisation). This mirrors resolve_choice() so the unplaced
-     * computation stays consistent with how the dropzones are rendered.
-     *
-     * @param array<int, array{group:int,xy:array{0:int,1:int}}> $places
-     * @param array<int, int> $responses
-     * @return array<int, array{group:int, choice:object}>
-     */
-    private function collect_unplaced_choices(array $places, array $responses): array {
-        $question = $this->questionattempt->get_question();
-        if (empty($question->choices)) {
-            return [];
-        }
-
-        $usedchoicekeys = [];
+        $usedkeys = [];
         foreach ($responses as $placeno => $responsevalue) {
-            if ($responsevalue === 0 || !isset($places[$placeno])) {
+            if (!isset($question->places[$placeno])) {
                 continue;
             }
-            $group = (int) $places[$placeno]['group'];
-            $choicekey = $this->resolve_choice_key($group, $responsevalue);
+            $group = (int) $question->places[$placeno]->group;
+            $choicekey = $this->lookup_choice_key($group, $responsevalue);
             if ($choicekey === null) {
                 continue;
             }
-            $usedchoicekeys[$group][$choicekey] = true;
+            $usedkeys[$group][$choicekey] = true;
         }
 
-        $unplaced = [];
+        $contents = [];
         foreach ($question->choices as $groupid => $groupchoices) {
             $groupid = (int) $groupid;
             foreach ($groupchoices as $choicekey => $choice) {
-                if (isset($usedchoicekeys[$groupid][(int) $choicekey])) {
+                if (isset($usedkeys[$groupid][(int) $choicekey])) {
                     continue;
                 }
-                $unplaced[] = ['group' => $groupid, 'choice' => $choice];
+                $contents[] = $this->build_unplaced_pill_content($choice);
             }
         }
-        return $unplaced;
+        return $contents;
     }
 
-    /**
-     * Resolve a response value to the array key it points to in
-     * $question->choices[$group]. Mirrors resolve_choice() but returns the
-     * key instead of the choice object.
-     */
-    private function resolve_choice_key(int $groupno, int $responsevalue): ?int {
-        $question = $this->questionattempt->get_question();
-        if (isset($question->choiceorder[$groupno][$responsevalue])) {
-            return (int) $question->choiceorder[$groupno][$responsevalue];
-        }
-        if (isset($question->choices[$groupno][$responsevalue])) {
-            return $responsevalue;
-        }
-        return null;
-    }
-
-    /**
-     * Build the inner HTML for an unplaced choice's pill: image thumbnail
-     * for image-typed choices, plain escaped text otherwise.
-     */
     private function build_unplaced_pill_content($choice): string {
         $info = !empty($choice->id) ? $this->get_image_info('dragimage', (int) $choice->id) : null;
         if ($info !== null) {

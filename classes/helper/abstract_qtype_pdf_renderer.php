@@ -25,6 +25,7 @@
 namespace quiz_export\helper;
 
 use question_attempt;
+use question_attempt_step;
 use question_display_options;
 
 defined('MOODLE_INTERNAL') || die();
@@ -35,9 +36,7 @@ defined('MOODLE_INTERNAL') || die();
  *
  * mPDF only honours position:absolute on top-level blocks, which makes plain
  * HTML overlays unusable for nested layouts. SVG is rendered as a single
- * image-like unit by mPDF and gives us pixel-accurate placement, so concrete
- * implementations build an inline SVG containing the background image plus
- * absolutely positioned overlays.
+ * image-like unit by mPDF and gives us pixel-accurate placement.
  */
 abstract class abstract_qtype_pdf_renderer {
 
@@ -50,11 +49,6 @@ abstract class abstract_qtype_pdf_renderer {
     /** @var question_display_options|null Review display options. */
     protected $displayoptions;
 
-    /**
-     * @param string $questionhtml Raw HTML for the outer div.que block.
-     * @param question_attempt $questionattempt The attempt for this slot.
-     * @param question_display_options|null $displayoptions Display options.
-     */
     public function __construct(
         string $questionhtml,
         question_attempt $questionattempt,
@@ -67,15 +61,11 @@ abstract class abstract_qtype_pdf_renderer {
 
     /**
      * Produce the PDF-friendly HTML replacing the interactive question block.
-     *
-     * @return string Static HTML compatible with mPDF.
      */
     abstract public function render_for_pdf(): string;
 
     /**
-     * Detect if correctness markers (right/wrong icons) should be displayed.
-     *
-     * @return bool
+     * Whether correctness markers (right/wrong icons) should be displayed.
      */
     protected function should_show_correctness(): bool {
         if ($this->displayoptions === null) {
@@ -86,13 +76,7 @@ abstract class abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Build the SVG node carrying a check / cross icon next to a dropped item.
-     *
-     * @param bool $iscorrect Whether the answer is correct.
-     * @param float $cx Centre x in viewBox coordinates.
-     * @param float $cy Centre y in viewBox coordinates.
-     * @param float $size Icon size in viewBox units.
-     * @return string SVG markup.
+     * Build the SVG node carrying a check / cross icon.
      */
     protected function build_correctness_svg(bool $iscorrect, float $cx, float $cy, float $size): string {
         $color = $iscorrect ? '#2a8a2a' : '#c83737';
@@ -112,65 +96,9 @@ abstract class abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Pull the qtext div from the question HTML keeping the original
-     * formatting. Uses a depth-aware scan so nested divs inside the question
-     * text are handled correctly.
-     *
-     * @return string The qtext block (including its outer div) or empty
-     *                string when not found.
-     */
-    protected function extract_qtext_html(): string {
-        $needle = 'class="qtext"';
-        $html = $this->questionhtml;
-
-        $position = strpos($html, $needle);
-        if ($position === false) {
-            return '';
-        }
-        $tagstart = strrpos(substr($html, 0, $position), '<div');
-        if ($tagstart === false) {
-            return '';
-        }
-
-        $cursor = $tagstart;
-        $depth = 0;
-        $length = strlen($html);
-        while ($cursor < $length) {
-            $next = strpos($html, '<', $cursor);
-            if ($next === false) {
-                return '';
-            }
-            $opening = substr($html, $next, 4) === '<div';
-            $closing = substr($html, $next, 6) === '</div>';
-            if ($opening) {
-                $depth++;
-                $cursor = $next + 4;
-                continue;
-            }
-            if ($closing) {
-                $depth--;
-                $cursor = $next + 6;
-                if ($depth === 0) {
-                    return substr($html, $tagstart, $cursor - $tagstart);
-                }
-                continue;
-            }
-            $cursor = $next + 1;
-        }
-        return '';
-    }
-
-    /**
-     * Replace, in $this->questionhtml, the first <div> whose class attribute
-     * contains the given class token by the supplied replacement HTML.
-     *
-     * Uses a depth-aware scan to handle nested <div> inside the targeted
-     * block. The surrounding HTML (in particular the .info and .outcome
-     * blocks emitted by Moodle's question renderer chrome) is preserved.
-     *
-     * @param string $classname Bare class token to match (e.g. "ddarea").
-     * @param string $replacement HTML to inject in place of the matched div.
-     * @return string The modified HTML; original HTML when the div is not found.
+     * Replace the first <div> whose class attribute carries the given token
+     * by the supplied HTML, preserving everything outside that block (info,
+     * outcome, history…). Depth-aware to handle nested divs.
      */
     protected function replace_div_with_class(string $classname, string $replacement): string {
         $html = $this->questionhtml;
@@ -190,14 +118,12 @@ abstract class abstract_qtype_pdf_renderer {
             if ($next === false) {
                 return $html;
             }
-            $opening = substr($html, $next, 4) === '<div';
-            $closing = substr($html, $next, 6) === '</div>';
-            if ($opening) {
+            if (substr($html, $next, 4) === '<div') {
                 $depth++;
                 $cursor = $next + 4;
                 continue;
             }
-            if ($closing) {
+            if (substr($html, $next, 6) === '</div>') {
                 $depth--;
                 $cursor = $next + 6;
                 if ($depth === 0) {
@@ -210,6 +136,84 @@ abstract class abstract_qtype_pdf_renderer {
             $cursor = $next + 1;
         }
         return $html;
+    }
+
+    /**
+     * Resolve a response value (1-based choiceorder index) to the actual
+     * array key in $question->choices[$group], using the same data Moodle
+     * stored at start_attempt() time.
+     *
+     * Reads $question->choiceorder when populated; otherwise falls back to
+     * the `_choiceorder{G}` qt_var directly (robust to lazy-init flows where
+     * apply_attempt_state has not been re-run yet); finally falls back to
+     * identity when the question doesn't shuffle.
+     *
+     * Returns null when no mapping can be inferred safely.
+     */
+    protected function lookup_choice_key(int $group, int $responsevalue): ?int {
+        if ($responsevalue === 0) {
+            return null;
+        }
+        $question = $this->questionattempt->get_question();
+
+        if (isset($question->choiceorder[$group][$responsevalue])) {
+            return (int) $question->choiceorder[$group][$responsevalue];
+        }
+
+        $stored = $this->questionattempt->get_last_qt_var('_choiceorder' . $group);
+        if ($stored !== null && $stored !== '') {
+            $orderkeys = explode(',', $stored);
+            if (isset($orderkeys[$responsevalue - 1])) {
+                return (int) $orderkeys[$responsevalue - 1];
+            }
+        }
+
+        if (empty($question->shufflechoices)
+                && isset($question->choices[$group][$responsevalue])) {
+            return $responsevalue;
+        }
+
+        return null;
+    }
+
+    /**
+     * Bootstrap $question->choiceorder for gapselect-derived question types.
+     *
+     * Moodle stores the per-attempt shuffled order in a `_choiceorder{G}` qt_var
+     * during start_attempt(). Calling apply_attempt_state() with a step that
+     * carries those vars rehydrates $question->choiceorder so all the standard
+     * methods (get_ordered_choices, get_right_choice_for…) return correct data.
+     *
+     * Reading via get_last_qt_var() (instead of get_step(0)) is robust to
+     * lazy-init flows where the data lives in a non-zero step.
+     */
+    protected function ensure_question_state_applied(): void {
+        $question = $this->questionattempt->get_question();
+        if (!empty($question->choiceorder)) {
+            return;
+        }
+        if (empty($question->choices) || !method_exists($question, 'apply_attempt_state')) {
+            return;
+        }
+
+        $vars = [];
+        foreach ($question->choices as $group => $groupchoices) {
+            $stored = $this->questionattempt->get_last_qt_var('_choiceorder' . $group);
+            if ($stored !== null && $stored !== '') {
+                $vars['_choiceorder' . $group] = $stored;
+            } else if (empty($question->shufflechoices)) {
+                $vars['_choiceorder' . $group] = implode(',', array_keys($groupchoices));
+            } else {
+                return;
+            }
+        }
+
+        try {
+            $question->apply_attempt_state(new question_attempt_step($vars));
+        } catch (\Throwable $exception) {
+            debugging('quiz_export: apply_attempt_state failed: '
+                . $exception->getMessage(), DEBUG_DEVELOPER);
+        }
     }
 
     /**
@@ -230,12 +234,7 @@ abstract class abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Build a base64 data URI from a question file area, suitable for being
-     * embedded as an SVG <image href="..."> attribute.
-     *
-     * @param string $filearea The Moodle filearea (bgimage, dragimage...).
-     * @param int $itemid The itemid for the area.
-     * @return string|null Data URI or null when no file was found.
+     * Build a base64 data URI for an image stored in a question filearea.
      */
     protected function get_image_data_uri(string $filearea, int $itemid): ?string {
         $file = $this->find_first_file($filearea, $itemid);
@@ -248,7 +247,7 @@ abstract class abstract_qtype_pdf_renderer {
 
     /**
      * Build a data URI together with the natural pixel dimensions of an
-     * image stored in a question file area, in a single file_storage hit.
+     * image stored in a question filearea, in a single file_storage hit.
      *
      * @return array{data:string, width:int, height:int}|null
      */
@@ -269,14 +268,6 @@ abstract class abstract_qtype_pdf_renderer {
         ];
     }
 
-    /**
-     * Locate the first non-directory file for the given area on the current
-     * question.
-     *
-     * @param string $filearea Filearea to inspect.
-     * @param int $itemid Item id within that area.
-     * @return \stored_file|null
-     */
     protected function find_first_file(string $filearea, int $itemid) {
         $component = $this->get_question_component_name();
         $contextid = $this->get_question_context_id();
@@ -293,25 +284,16 @@ abstract class abstract_qtype_pdf_renderer {
         return null;
     }
 
-    /**
-     * Get the question id for file lookups.
-     */
     protected function get_question_id(): int {
         $question = $this->questionattempt->get_question();
         return isset($question->id) ? (int) $question->id : 0;
     }
 
-    /**
-     * Get the question context id for file lookups.
-     */
     protected function get_question_context_id(): int {
         $question = $this->questionattempt->get_question();
         return isset($question->contextid) ? (int) $question->contextid : 0;
     }
 
-    /**
-     * Get the qtype frankenstyle component name for file lookups.
-     */
     protected function get_question_component_name(): string {
         $question = $this->questionattempt->get_question();
         if (!isset($question->qtype)) {
@@ -320,12 +302,6 @@ abstract class abstract_qtype_pdf_renderer {
         return (string) $question->qtype->plugin_name();
     }
 
-    /**
-     * Escape text content for safe inclusion in an SVG element.
-     *
-     * @param string $value Raw text.
-     * @return string XML-safe text.
-     */
     protected function svg_escape(string $value): string {
         return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
@@ -339,7 +315,6 @@ abstract class abstract_qtype_pdf_renderer {
      * fragments (text choices must be htmlspecialchars-escaped first).
      *
      * @param array<int, string> $innercontents Pre-built HTML to wrap in pills.
-     * @return string Section HTML, or empty string when nothing to display.
      */
     protected function render_unplaced_section(array $innercontents): string {
         if (empty($innercontents)) {

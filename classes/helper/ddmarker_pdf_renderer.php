@@ -68,18 +68,19 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     private const CHAR_WIDTH_RATIO = 0.55;
 
     public function render_for_pdf(): string {
-        $questionattempt = $this->questionattempt;
-        $question = $questionattempt->get_question();
+        $this->ensure_question_state_applied();
+
+        $question = $this->questionattempt->get_question();
         if (empty($question->choices) || empty($question->choices[1])) {
             return $this->questionhtml;
         }
 
-        $bgimagedata = $this->get_image_data_uri('bgimage', $this->get_question_id());
+        $bgimagedata = $this->get_image_data_uri('bgimage', $question->id);
         if ($bgimagedata === null) {
             return $this->questionhtml;
         }
 
-        list($imagewidth, $imageheight) = $this->get_background_image_size();
+        [$imagewidth, $imageheight] = $this->get_background_image_size();
         if ($imagewidth === 0 || $imageheight === 0) {
             return $this->questionhtml;
         }
@@ -117,22 +118,15 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Identify the marker labels that the student did not drop anywhere on
-     * the image. A choice is considered placed when its c{choiceno} qt_var
-     * holds at least one parseable "x,y" pair.
+     * Identify the marker labels the student did not drop anywhere on the
+     * image. A choice is considered placed when its c{choiceno} qt_var holds
+     * at least one parseable "x,y" pair.
      *
      * @return array<int, object> Drag descriptors as returned by get_ordered_choices.
      */
     private function collect_unplaced_choices(): array {
-        $question = $this->questionattempt->get_question();
-        $orderedchoices = $question->get_ordered_choices(1);
-        if (empty($orderedchoices)) {
-            // Fallback when choiceorder isn't initialised on the question.
-            $orderedchoices = $question->choices[1] ?? [];
-        }
-
         $unplaced = [];
-        foreach ($orderedchoices as $choiceno => $drag) {
+        foreach ($this->questionattempt->get_question()->get_ordered_choices(1) as $choiceno => $drag) {
             if (!$this->is_choice_placed((int) $choiceno)) {
                 $unplaced[] = $drag;
             }

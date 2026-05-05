@@ -24,189 +24,113 @@
 
 namespace quiz_export\helper;
 
+use question_utils;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
  * Replaces the interactive drop zones inside ddwtos question text by the
- * actual labels the student dragged into them, producing a PDF-friendly
- * static rendering.
+ * actual labels the student dragged into them, producing a static rendering
+ * compatible with mPDF.
  *
- * The default Moodle ddwtos renderer outputs empty placeholder spans that
- * are filled in by JavaScript; in the PDF, these would appear as the
- * "accesshide" texts ("Espace 1 Question N..."), which is unreadable. This
- * renderer rewrites them inline with the actual choice content. When the
- * review options expose correctness, each filled label is bordered green
- * (correct) or red (incorrect).
+ * Reads positions, groups, choices and responses from the Moodle question
+ * API ($question->places, $question->choices, $question->get_ordered_choices(),
+ * $qa->get_last_qt_data()), so shuffle and choice resolution stay consistent
+ * with what Moodle's review page displays.
  */
 class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
 
-    /** @var string Border colour for correct responses. */
     private const BORDER_CORRECT = '#2a8a2a';
-
-    /** @var string Background colour for correct responses. */
     private const BG_CORRECT = '#e6f4e6';
-
-    /** @var string Border colour for incorrect responses. */
     private const BORDER_INCORRECT = '#c83737';
-
-    /** @var string Background colour for incorrect responses. */
     private const BG_INCORRECT = '#fbe5e5';
-
-    /** @var string Border colour when correctness should not be exposed. */
     private const BORDER_NEUTRAL = '#4285f4';
-
-    /** @var string Background colour when correctness should not be exposed. */
     private const BG_NEUTRAL = '#e8f0fe';
-
-    /** @var string Border width applied to filled markers. */
     private const BORDER_WIDTH = '2px';
 
     public function render_for_pdf(): string {
-        $responses = $this->extract_responses_from_html();
-        $choices = $this->extract_drag_choices_from_html();
-        if (empty($choices)) {
+        $this->ensure_question_state_applied();
+
+        $question = $this->questionattempt->get_question();
+        if (empty($question->places) || empty($question->choices)) {
             return $this->questionhtml;
         }
 
-        $this->ensure_choiceorder_initialised();
+        $responses = $this->collect_responses();
 
-        $unplacedhtml = $this->render_unplaced_section(
-            $this->collect_unplaced_choice_contents($responses, $choices)
+        $html = $this->fill_drop_zones($this->questionhtml, $responses);
+        $html = $this->replace_drag_homes_container(
+            $html,
+            $this->render_unplaced_section($this->build_unplaced_pill_contents($responses))
         );
-
-        $html = $this->fill_drop_zones($this->questionhtml, $responses, $choices);
-        $html = $this->replace_drag_homes_container($html, $unplacedhtml);
         return $html;
     }
 
     /**
-     * Identify the draghome labels that were never used in any response and
-     * return their visible HTML, ready to be wrapped in unplaced pills.
+     * Read each place's response value, mirroring the per-field lookup
+     * Moodle's own ddwtos renderer performs.
      *
-     * @param array<int, array{group:int, value:int}> $responses
-     * @param array<string, string> $choices Keyed by "group{G}-choice{N}".
-     * @return array<int, string>
+     * @return array<int, int> Map placeno => choiceorder index (0 means "no response").
      */
-    private function collect_unplaced_choice_contents(array $responses, array $choices): array {
-        $usedkeys = [];
-        foreach ($responses as $response) {
-            if ((int) $response['value'] === 0) {
-                continue;
-            }
-            $usedkeys['group' . $response['group'] . '-choice' . $response['value']] = true;
-        }
-
-        $unplaced = [];
-        foreach ($choices as $key => $labelhtml) {
-            if (isset($usedkeys[$key])) {
-                continue;
-            }
-            $unplaced[] = $labelhtml;
-        }
-        return $unplaced;
-    }
-
-    /**
-     * Read response values from the placeinput hidden inputs.
-     *
-     * @return array<int, array{group:int, value:int}> Map placeno => response data.
-     */
-    private function extract_responses_from_html(): array {
+    private function collect_responses(): array {
+        $question = $this->questionattempt->get_question();
         $responses = [];
-        if (!preg_match_all('#<input\b[^>]*\bclass="[^"]*\bplaceinput\b[^"]*"[^>]*>#is',
-                $this->questionhtml, $matches)) {
-            return $responses;
-        }
-        foreach ($matches[0] as $tag) {
-            if (!preg_match('#\bclass="([^"]*)"#i', $tag, $classmatch)) {
-                continue;
-            }
-            if (!preg_match('#\bplace(\d+)\b#', $classmatch[1], $placematch)) {
-                continue;
-            }
-            if (!preg_match('#\bgroup(\d+)\b#', $classmatch[1], $groupmatch)) {
-                continue;
-            }
-            $value = 0;
-            if (preg_match('#\bvalue="([^"]*)"#i', $tag, $valuematch)) {
-                $value = (int) $valuematch[1];
-            }
-            $responses[(int) $placematch[1]] = [
-                'group' => (int) $groupmatch[1],
-                'value' => $value,
-            ];
+        foreach ($question->places as $placeno => $unused) {
+            $value = $this->questionattempt->get_last_qt_var($question->field($placeno));
+            $responses[(int) $placeno] = $value !== null ? (int) $value : 0;
         }
         return $responses;
     }
 
     /**
-     * Build a lookup of available drag labels keyed by "group{G}-choice{N}".
-     *
-     * @return array<string, string> Map of key => visible label HTML.
+     * Replace each <span class="placeN drop ..."> ... </span></span> wrapper
+     * by the rendered label of the dragged choice. The depth-aware match
+     * ($placeholder span contains an inner accesshide span emitted by Moodle)
+     * uses a non-greedy match terminating at the second </span>.
      */
-    private function extract_drag_choices_from_html(): array {
-        $choices = [];
-        if (!preg_match_all('#<span\b[^>]*\bclass="([^"]*\bdraghome\b[^"]*)"[^>]*>(.*?)</span>#is',
-                $this->questionhtml, $matches, PREG_SET_ORDER)) {
-            return $choices;
-        }
-        foreach ($matches as $match) {
-            $classes = $match[1];
-            if (!preg_match('#\bchoice(\d+)\b#', $classes, $choicematch)) {
-                continue;
-            }
-            if (!preg_match('#\bgroup(\d+)\b#', $classes, $groupmatch)) {
-                continue;
-            }
-            $choices['group' . $groupmatch[1] . '-choice' . $choicematch[1]] = trim($match[2]);
-        }
-        return $choices;
-    }
-
-    /**
-     * Replace each <span class="placeN drop ..."> ... </span> by the matching
-     * choice content. The accesshide label inside the placeholder is dropped.
-     *
-     * @param string $html Original question HTML.
-     * @param array $responses Map of placeno => [group, value].
-     * @param array $choices Map of "group{G}-choice{N}" => visible content.
-     * @return string Transformed HTML.
-     */
-    private function fill_drop_zones(string $html, array $responses, array $choices): string {
-        $pattern = '#<span\b[^>]*\bclass="([^"]*\bplace(\d+)\b[^"]*\bdrop\b[^"]*)"[^>]*>.*?</span>#is';
-        return preg_replace_callback($pattern, function ($match) use ($responses, $choices) {
-            $placeno = (int) $match[2];
-            if (!isset($responses[$placeno])) {
+    private function fill_drop_zones(string $html, array $responses): string {
+        $pattern = '#<span\b[^>]*\bclass="(?:[^"]*\s)?place(\d+)\b[^"]*\bdrop\b[^"]*"[^>]*>.*?</span>\s*</span>#is';
+        return preg_replace_callback($pattern, function ($match) use ($responses) {
+            $placeno = (int) $match[1];
+            $responsevalue = $responses[$placeno] ?? 0;
+            if ($responsevalue === 0) {
                 return $this->build_blank_marker();
             }
-            $response = $responses[$placeno];
-            if ((int) $response['value'] === 0) {
+            $contenthtml = $this->render_choice_content($placeno, $responsevalue);
+            if ($contenthtml === null) {
                 return $this->build_blank_marker();
             }
-            $key = 'group' . $response['group'] . '-choice' . $response['value'];
-            if (!isset($choices[$key])) {
-                return $this->build_blank_marker();
-            }
-            $iscorrect = $this->resolve_correctness_for($placeno, (int) $response['value']);
-            return $this->build_filled_marker($choices[$key], $iscorrect);
+            return $this->build_filled_marker($contenthtml, $this->resolve_correctness($placeno, $responsevalue));
         }, $html);
     }
 
     /**
-     * Determine whether the student's response for a place is the right one.
-     *
-     * @return bool|null True when correct, false when incorrect, null when
-     *                   correctness should not be displayed (display options
-     *                   hide it, or the question API cannot decide).
+     * Render the visible HTML of the choice the student placed at $placeno,
+     * matching how Moodle formats draghome content (filters applied).
      */
-    private function resolve_correctness_for(int $placeno, int $responsevalue): ?bool {
+    private function render_choice_content(int $placeno, int $responsevalue): ?string {
+        $question = $this->questionattempt->get_question();
+        $group = (int) ($question->places[$placeno] ?? 0);
+        if ($group === 0) {
+            return null;
+        }
+        $ordered = $question->get_ordered_choices($group);
+        if (!isset($ordered[$responsevalue])) {
+            return null;
+        }
+        $context = \context::instance_by_id($question->contextid);
+        return question_utils::format_question_fragment((string) $ordered[$responsevalue]->text, $context);
+    }
+
+    /**
+     * Determine whether the student's placed choice is correct, or null when
+     * correctness should be hidden by the display options.
+     */
+    private function resolve_correctness(int $placeno, int $responsevalue): ?bool {
         if (!$this->should_show_correctness()) {
             return null;
         }
         $question = $this->questionattempt->get_question();
-        if (!method_exists($question, 'get_right_choice_for')) {
-            return null;
-        }
         $rightchoice = $question->get_right_choice_for($placeno);
         if ($rightchoice === null) {
             return null;
@@ -215,38 +139,11 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Defensive fallback: if the question was lazily fetched without
-     * apply_attempt_state(), choiceorder may be empty, which breaks
-     * get_right_choice_for(). Reapply the first step so correctness checks
-     * return reliable data.
-     */
-    private function ensure_choiceorder_initialised(): void {
-        $question = $this->questionattempt->get_question();
-        if (!empty($question->choiceorder)) {
-            return;
-        }
-        if (!method_exists($question, 'apply_attempt_state')) {
-            return;
-        }
-        try {
-            $firststep = $this->questionattempt->get_step(0);
-            $question->apply_attempt_state($firststep);
-        } catch (\Throwable $exception) {
-            debugging('quiz_export ddwtos: choiceorder fallback failed: '
-                . $exception->getMessage(), DEBUG_DEVELOPER);
-        }
-    }
-
-    /**
      * Replace the answercontainer block (the available drag labels listed
      * below the question text by Moodle's runtime renderer) by the given
      * static content. Keeping this position means the unplaced labels appear
      * inside the formulation block (the coloured response panel) rather than
      * after the question's response history.
-     *
-     * @param string $html Source HTML.
-     * @param string $replacement HTML to inject in place of the container.
-     * @return string Transformed HTML.
      */
     private function replace_drag_homes_container(string $html, string $replacement): string {
         $pattern = '#<div\b[^>]*\bclass="[^"]*\banswercontainer\b[^"]*"[^>]*>.*?</div>\s*#is';
@@ -255,12 +152,9 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Build the inline marker used when a place has a response. Border
-     * colour reflects correctness (green/red) or stays neutral blue when
-     * correctness should not be revealed.
-     *
-     * @param string $contenthtml The rendered drag content to embed.
-     * @param bool|null $iscorrect True/false drives green/red, null keeps neutral.
+     * Inline marker used when a place has a response. Border/background
+     * reflect correctness (green/red) or neutral blue when correctness should
+     * not be revealed.
      */
     private function build_filled_marker(string $contenthtml, ?bool $iscorrect): string {
         if ($iscorrect === true) {
@@ -284,14 +178,49 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
             . '</span>';
     }
 
-    /**
-     * Build the inline marker used when a place has no response.
-     */
     private function build_blank_marker(): string {
         return '<span class="quiz_export-ddwtos-blank" '
             . 'style="display:inline-block; min-width:30px; padding:0 4px; '
             . 'background:#f5f5f5; border:' . self::BORDER_WIDTH . ' dashed #999; border-radius:3px;">'
             . '&nbsp;&nbsp;&nbsp;'
             . '</span>';
+    }
+
+    /**
+     * Build the inner HTML for each unplaced choice's pill: the label
+     * formatted via Moodle filters, exactly as draghomes appear in the
+     * interactive review.
+     *
+     * @param array<int, int> $responses Map placeno => choiceorder index.
+     * @return array<int, string>
+     */
+    private function build_unplaced_pill_contents(array $responses): array {
+        $question = $this->questionattempt->get_question();
+
+        $usedkeys = [];
+        foreach ($responses as $placeno => $responsevalue) {
+            if (!isset($question->places[$placeno])) {
+                continue;
+            }
+            $group = (int) $question->places[$placeno];
+            $choicekey = $this->lookup_choice_key($group, $responsevalue);
+            if ($choicekey === null) {
+                continue;
+            }
+            $usedkeys[$group][$choicekey] = true;
+        }
+
+        $context = \context::instance_by_id($question->contextid);
+        $contents = [];
+        foreach ($question->choices as $groupid => $groupchoices) {
+            $groupid = (int) $groupid;
+            foreach ($groupchoices as $choicekey => $choice) {
+                if (isset($usedkeys[$groupid][(int) $choicekey])) {
+                    continue;
+                }
+                $contents[] = question_utils::format_question_fragment((string) $choice->text, $context);
+            }
+        }
+        return $contents;
     }
 }
