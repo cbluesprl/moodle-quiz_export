@@ -40,6 +40,15 @@ defined('MOODLE_INTERNAL') || die();
  */
 abstract class abstract_qtype_pdf_renderer {
 
+    /** @var float Image render width inside the SVG canvas, in points. */
+    protected const IMAGE_WIDTH_PT = 480.0;
+
+    /** @var float Padding around the image inside the SVG canvas, in points. */
+    protected const CANVAS_PADDING_PT = 60.0;
+
+    /** @var float Approximate average character width as a fraction of the font size. */
+    protected const CHAR_WIDTH_RATIO = 0.55;
+
     /** @var string Raw HTML of the outer question block (div.que.TYPE). */
     protected $questionhtml;
 
@@ -268,7 +277,11 @@ abstract class abstract_qtype_pdf_renderer {
         ];
     }
 
-    protected function find_first_file(string $filearea, int $itemid) {
+    /**
+     * Return the first non-directory file in a given filearea/itemid pair for
+     * the question's component, or null when nothing matches.
+     */
+    protected function find_first_file(string $filearea, int $itemid): ?\stored_file {
         $component = $this->get_question_component_name();
         $contextid = $this->get_question_context_id();
         if ($component === '' || $contextid === 0) {
@@ -307,40 +320,65 @@ abstract class abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Render the "unplaced labels" section: a centered block with a heading
-     * and a row of bordered pills, each containing the supplied inner HTML.
+     * Produce the canvas geometry: total dimensions, image placement and the
+     * scale factor to convert original image pixels into canvas points.
      *
-     * Subclasses are responsible for computing the unplaced contents in their
-     * own format (qtype-specific) and passing them as already-safe HTML
-     * fragments (text choices must be htmlspecialchars-escaped first).
-     *
-     * @param array<int, string> $innercontents Pre-built HTML to wrap in pills.
+     * @param int $imagewidth  Natural background image width in pixels.
+     * @param int $imageheight Natural background image height in pixels.
+     * @return array{
+     *     totalw:float, totalh:float,
+     *     imgx:float, imgy:float, imgw:float, imgh:float,
+     *     padding:float, scale:float
+     * }
      */
-    protected function render_unplaced_section(array $innercontents): string {
-        if (empty($innercontents)) {
+    protected function build_canvas_geometry(int $imagewidth, int $imageheight): array {
+        $imgw = static::IMAGE_WIDTH_PT;
+        $imgh = ($imageheight / $imagewidth) * $imgw;
+        $padding = static::CANVAS_PADDING_PT;
+        return [
+            'totalw' => $imgw + (2 * $padding),
+            'totalh' => $imgh + (2 * $padding),
+            'imgx' => $padding,
+            'imgy' => $padding,
+            'imgw' => $imgw,
+            'imgh' => $imgh,
+            'padding' => $padding,
+            'scale' => $imgw / $imagewidth,
+        ];
+    }
+
+    /**
+     * Build the background image element placed inside the canvas.
+     */
+    protected function build_background_svg(string $bgimagedata, array $canvas): string {
+        return '<image x="' . $canvas['imgx'] . '" y="' . $canvas['imgy'] . '" '
+            . 'width="' . $canvas['imgw'] . '" height="' . $canvas['imgh'] . '" '
+            . 'href="' . $bgimagedata . '" '
+            . 'xlink:href="' . $bgimagedata . '" />';
+    }
+
+    /**
+     * Render the "unplaced labels" section: a centred block laying out the
+     * supplied pills horizontally, with natural line wrap when there are too
+     * many to fit on a single line.
+     *
+     * Each entry in `$pills` must already be a fully styled snippet (typically
+     * `<span style="display:inline-block; ..."> ... </span>`). Mimicking
+     * Moodle's per-question-type draghome look (group colour, border, font…)
+     * is the responsibility of the subclasses, since it varies across question
+     * types. The visual gap between pills is supplied by their own `margin`,
+     * and the pills are joined by a regular space so mPDF can break the line.
+     *
+     * @param array<int, string> $pills Pre-styled pill snippets.
+     */
+    protected function render_unplaced_section(array $pills): string {
+        $pills = array_filter($pills, fn($pill) => $pill !== '');
+        if (empty($pills)) {
             return '';
         }
-        $pillstyle = 'display:inline-block; padding:3pt 8pt; '
-            . 'border:1px solid #999; border-radius:4px; '
-            . 'margin:4pt 8pt; background:#f5f5f5; '
-            . 'font-family: Helvetica, Arial, sans-serif; font-size:10pt;';
-        $pills = [];
-        foreach ($innercontents as $inner) {
-            $pills[] = '<span style="' . $pillstyle . '">' . $inner . '</span>';
-        }
-        // mPDF can collapse margins on adjacent inline-blocks; an explicit
-        // separator guarantees a visible gap between consecutive pills.
-        $separator = '&nbsp;&nbsp;';
-        $heading = htmlspecialchars(
-            get_string('unplacedlabels', 'quiz_export'),
-            ENT_QUOTES | ENT_SUBSTITUTE,
-            'UTF-8'
-        );
         return '<div class="quiz_export-dd-unplaced" '
-            . 'style="margin-top:8pt; text-align:center;">'
-            . '<div style="font-weight:bold; color:#555; margin-bottom:4pt;">'
-            . $heading . '</div>'
-            . implode($separator, $pills)
+            . 'style="margin-top:8pt; text-align:center; line-height:1.6;">'
+            . implode(' ', $pills)
             . '</div>';
     }
 }

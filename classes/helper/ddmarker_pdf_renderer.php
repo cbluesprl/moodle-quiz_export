@@ -46,26 +46,32 @@ defined('MOODLE_INTERNAL') || die();
  */
 class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
 
-    /** @var float Image render width inside the canvas, in points. */
-    private const IMAGE_WIDTH_PT = 480.0;
-
-    /** @var float Padding around the image inside the canvas, in points. */
-    private const CANVAS_PADDING_PT = 60.0;
-
-    /** @var float Marker dot radius in canvas points. */
-    private const DOT_RADIUS_PT = 4.5;
+    /** @var float Full size (width and height) of the marker crosshair, in canvas points. */
+    private const CROSSHAIR_SIZE_PT = 12.5;
 
     /** @var float Font size for marker labels in canvas points. */
-    private const FONT_SIZE_PT = 10.0;
+    private const FONT_SIZE_PT = 15.5;
 
-    /** @var float Distance between the dot edge and the label box, in canvas points. */
-    private const LABEL_OFFSET_PT = 8.0;
+    /** @var float Distance between the crosshair edge and the label box, in canvas points. */
+    private const LABEL_OFFSET_PT = 6.0;
 
-    /** @var float Stroke width for the dot-to-label connector line, in canvas points. */
+    /** @var float Stroke width for the crosshair-to-label connector line, in canvas points. */
     private const CONNECTOR_WIDTH_PT = 0.6;
 
-    /** @var float Approximate average character width as a fraction of the font size. */
-    private const CHAR_WIDTH_RATIO = 0.55;
+    /** @var float Pill corner radius in canvas points. */
+    private const PILL_BORDER_RADIUS_PT = 4.0;
+
+    /** @var float Pill border stroke width in canvas points. */
+    private const PILL_BORDER_WIDTH_PT = 0.7;
+
+    /** @var float Gap between the markertext and the correctness icon inside the pill. */
+    private const CORRECTNESS_ICON_GAP_PT = 4.0;
+
+    /** @var float Font size of the expected-answer label drawn over a missed drop zone. */
+    private const ZONE_LABEL_FONT_PT = 9.0;
+
+    /** @var float Inner padding (horizontal & vertical) of the expected-answer pill, in canvas points. */
+    private const ZONE_LABEL_PADDING_PT = 3.0;
 
     public function render_for_pdf(): string {
         $this->ensure_question_state_applied();
@@ -85,10 +91,19 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
             return $this->questionhtml;
         }
 
+        $response = $this->collect_response();
+        $chosenhits = $this->compute_chosen_hits($response);
+
         $canvas = $this->build_canvas_geometry($imagewidth, $imageheight);
         $svgcontent = $this->build_background_svg($bgimagedata, $canvas);
 
-        $markers = $this->collect_markers($canvas);
+        if ($this->should_show_misplaced_zones()) {
+            foreach ($question->get_drop_zones_without_hit($response) as $zone) {
+                $svgcontent .= $this->render_expected_zone($zone, $canvas);
+            }
+        }
+
+        $markers = $this->collect_markers($canvas, $chosenhits);
         $occupiedboxes = $this->initial_occupied_boxes($markers);
 
         foreach ($markers as $marker) {
@@ -104,17 +119,213 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
             . $svgcontent
             . '</svg></div>';
 
-        $unplacedcontents = array_map(
-            fn($drag) => htmlspecialchars(
-                strip_tags((string) $drag->text),
-                ENT_QUOTES | ENT_SUBSTITUTE,
-                'UTF-8'
-            ),
+        $unplacedpills = array_map(
+            fn($drag) => $this->build_unplaced_pill(strip_tags((string) $drag->text)),
             $this->collect_unplaced_choices()
         );
-        $unplacedhtml = $this->render_unplaced_section($unplacedcontents);
+        $unplacedhtml = $this->render_unplaced_section($unplacedpills);
 
         return $this->replace_div_with_class('ddarea', $svgblock . $unplacedhtml);
+    }
+
+    /**
+     * Build the response array in the format expected by Moodle's grading
+     * methods: ['c1' => 'x1,y1;x2,y2', 'c2' => 'x,y', ...].
+     */
+    private function collect_response(): array {
+        $response = [];
+        foreach ($this->questionattempt->get_question()->get_ordered_choices(1) as $choiceno => $unused) {
+            $value = $this->questionattempt->get_last_qt_var('c' . $choiceno);
+            if ($value !== null && trim((string) $value) !== '') {
+                $response['c' . $choiceno] = (string) $value;
+            }
+        }
+        return $response;
+    }
+
+    /**
+     * Re-implement qtype_ddmarker_question::choose_hits() (protected upstream).
+     * Mirrors the reference algorithm so per-marker correctness in our SVG
+     * matches what Moodle's review page reports.
+     *
+     * @param array $response
+     * @return array<int, string> Map placeno => "$choice $itemno".
+     */
+    private function compute_chosen_hits(array $response): array {
+        $question = $this->questionattempt->get_question();
+
+        $hits = [];
+        foreach ($question->places as $placeno => $place) {
+            $rightchoice = $question->get_right_choice_for($placeno);
+            if ($rightchoice === null) {
+                continue;
+            }
+            $rightchoicekey = $question->choice($rightchoice);
+            if (!array_key_exists($rightchoicekey, $response)) {
+                continue;
+            }
+            foreach (explode(';', $response[$rightchoicekey]) as $itemno => $coord) {
+                if (trim($coord) === '') {
+                    continue;
+                }
+                $xy = explode(',', $coord);
+                if (count($xy) !== 2) {
+                    continue;
+                }
+                $point = [(int) round((float) $xy[0]), (int) round((float) $xy[1])];
+                if ($place->drop_hit($point)) {
+                    $hits[$placeno][$itemno] = $coord;
+                }
+            }
+        }
+        uasort($hits, fn($a, $b) => count($a) - count($b));
+
+        $chosenhits = [];
+        foreach ($hits as $placeno => $placehits) {
+            $rightchoice = $question->get_right_choice_for($placeno);
+            foreach ($placehits as $itemno => $unused) {
+                $choiceitem = "$rightchoice $itemno";
+                if (!in_array($choiceitem, $chosenhits, true)) {
+                    $chosenhits[$placeno] = $choiceitem;
+                    break;
+                }
+            }
+        }
+        return $chosenhits;
+    }
+
+    /**
+     * Whether the question is configured to highlight expected drop zones
+     * for misplaced markers (Moodle's `showmisplaced` setting), and the
+     * attempt is finished.
+     */
+    private function should_show_misplaced_zones(): bool {
+        $question = $this->questionattempt->get_question();
+        return !empty($question->showmisplaced)
+            && $this->questionattempt->get_state()->is_finished();
+    }
+
+    /**
+     * Render an "expected drop zone" overlay for a place the student missed,
+     * using the shape's natural geometry, and overlay the expected answer
+     * label inside the zone on a yellow translucent highlight pill so the
+     * grader can see at a glance which marker was supposed to be dropped
+     * there. Mirrors what Moodle's runtime JS draws based on
+     * `data-visibled-dropzones`.
+     */
+    private function render_expected_zone($zone, array $canvas): string {
+        $shape = (string) ($zone->shape ?? '');
+        $coords = (string) ($zone->coords ?? '');
+        $markertext = strip_tags((string) ($zone->markertext ?? ''));
+        $stroke = '#000000';
+        $fill = 'rgba(255, 213, 79, 0.4)';
+        $strokewidth = 1.5;
+
+        $offset = function (array $xy) use ($canvas): array {
+            return [
+                $canvas['imgx'] + ($xy[0] * $canvas['scale']),
+                $canvas['imgy'] + ($xy[1] * $canvas['scale']),
+            ];
+        };
+
+        if ($shape === 'circle') {
+            $parts = explode(';', $coords);
+            if (count($parts) !== 2) {
+                return '';
+            }
+            $centre = explode(',', $parts[0]);
+            if (count($centre) !== 2) {
+                return '';
+            }
+            [$cx, $cy] = $offset([(float) $centre[0], (float) $centre[1]]);
+            $r = ((float) $parts[1]) * $canvas['scale'];
+            $shapesvg = '<circle cx="' . $cx . '" cy="' . $cy . '" r="' . $r . '" '
+                . 'fill="' . $fill . '" stroke="' . $stroke . '" '
+                . 'stroke-width="' . $strokewidth . '"/>';
+            $centroid = [$cx, $cy];
+        } else if ($shape === 'rectangle') {
+            $parts = explode(';', $coords);
+            if (count($parts) !== 2) {
+                return '';
+            }
+            $topleft = explode(',', $parts[0]);
+            $size = explode(',', $parts[1]);
+            if (count($topleft) !== 2 || count($size) !== 2) {
+                return '';
+            }
+            [$x, $y] = $offset([(float) $topleft[0], (float) $topleft[1]]);
+            $w = ((float) $size[0]) * $canvas['scale'];
+            $h = ((float) $size[1]) * $canvas['scale'];
+            $shapesvg = '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" '
+                . 'fill="' . $fill . '" stroke="' . $stroke . '" '
+                . 'stroke-width="' . $strokewidth . '"/>';
+            $centroid = [$x + ($w / 2), $y + ($h / 2)];
+        } else if ($shape === 'polygon') {
+            $points = [];
+            $sumx = 0.0;
+            $sumy = 0.0;
+            $count = 0;
+            foreach (explode(';', $coords) as $pair) {
+                $xy = explode(',', $pair);
+                if (count($xy) !== 2) {
+                    continue;
+                }
+                [$x, $y] = $offset([(float) $xy[0], (float) $xy[1]]);
+                $points[] = $x . ',' . $y;
+                $sumx += $x;
+                $sumy += $y;
+                $count++;
+            }
+            if (empty($points)) {
+                return '';
+            }
+            $shapesvg = '<polygon points="' . implode(' ', $points) . '" '
+                . 'fill="' . $fill . '" stroke="' . $stroke . '" '
+                . 'stroke-width="' . $strokewidth . '"/>';
+            $centroid = [$sumx / $count, $sumy / $count];
+        } else {
+            return '';
+        }
+
+        if ($markertext !== '') {
+            $shapesvg .= $this->build_expected_zone_label($centroid[0], $centroid[1], $markertext);
+        }
+
+        return $shapesvg;
+    }
+
+    /**
+     * Render the expected-answer label centred on a missed drop zone.
+     *
+     * The label is drawn as a rounded rectangle filled with a translucent
+     * yellow (highlighter feel) and a darker yellow border, with the marker
+     * text in dark amber bold for readability over both the underlying zone
+     * and the background image.
+     */
+    private function build_expected_zone_label(float $cx, float $cy, string $text): string {
+        $font = self::ZONE_LABEL_FONT_PT;
+        $padding = self::ZONE_LABEL_PADDING_PT;
+        $textwidth = mb_strlen($text) * $font * self::CHAR_WIDTH_RATIO;
+
+        $rectw = $textwidth + (2 * $padding);
+        $recth = $font + (2 * $padding);
+        $rectx = $cx - ($rectw / 2);
+        $recty = $cy - ($recth / 2);
+
+        // Approximate baseline correction so the text appears vertically centred.
+        $ty = $cy + ($font * 0.35);
+        $escaped = $this->svg_escape($text);
+
+        return '<rect x="' . $rectx . '" y="' . $recty . '" '
+            . 'width="' . $rectw . '" height="' . $recth . '" '
+            . 'fill="#ffeb3b" fill-opacity="0.75" '
+            . 'stroke="#cca300" stroke-opacity="0.9" stroke-width="0.5" rx="2" ry="2"/>'
+            . '<text x="' . $cx . '" y="' . $ty . '" '
+            . 'text-anchor="middle" '
+            . 'font-family="Helvetica, Arial, sans-serif" '
+            . 'font-size="' . $font . '" '
+            . 'font-weight="bold" '
+            . 'fill="#5c4d00">' . $escaped . '</text>';
     }
 
     /**
@@ -132,6 +343,30 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
             }
         }
         return $unplaced;
+    }
+
+    /**
+     * Build a Moodle-style markertext pill for an unplaced marker label.
+     * Mirrors `.que.ddmarker .draghomes .marker span.markertext` (white bg,
+     * 2px black border with 10px radius, 0.6 opacity).
+     */
+    private function build_unplaced_pill(string $label): string {
+        if (trim($label) === '') {
+            return '';
+        }
+        $style = 'display:inline-block; '
+            . 'padding: 4pt 8pt; '
+            . 'border: 1.5pt solid #000; '
+            . 'background-color: #ffffff; '
+            . 'color: #000; '
+            . 'border-radius: 8pt; '
+            . 'font-family: Arial, Helvetica, sans-serif; '
+            . 'font-size: ' . self::FONT_SIZE_PT . 'pt; '
+            . 'margin: 3pt; '
+            . 'opacity: 0.7; '
+            . 'vertical-align: middle;';
+        $escaped = htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return '<span style="' . $style . '">' . $escaped . '</span>';
     }
 
     /**
@@ -156,59 +391,26 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Produce the canvas geometry: total dimensions, image placement and the
-     * scale factor to convert original image pixels into canvas points.
-     *
-     * @return array{
-     *     totalw:float, totalh:float,
-     *     imgx:float, imgy:float, imgw:float, imgh:float,
-     *     padding:float, scale:float
-     * }
-     */
-    private function build_canvas_geometry(int $imagewidth, int $imageheight): array {
-        $imgw = self::IMAGE_WIDTH_PT;
-        $imgh = ($imageheight / $imagewidth) * $imgw;
-        $padding = self::CANVAS_PADDING_PT;
-        return [
-            'totalw' => $imgw + (2 * $padding),
-            'totalh' => $imgh + (2 * $padding),
-            'imgx' => $padding,
-            'imgy' => $padding,
-            'imgw' => $imgw,
-            'imgh' => $imgh,
-            'padding' => $padding,
-            'scale' => $imgw / $imagewidth,
-        ];
-    }
-
-    /**
-     * Build the background image element placed inside the canvas.
-     */
-    private function build_background_svg(string $bgimagedata, array $canvas): string {
-        return '<image x="' . $canvas['imgx'] . '" y="' . $canvas['imgy'] . '" '
-            . 'width="' . $canvas['imgw'] . '" height="' . $canvas['imgh'] . '" '
-            . 'href="' . $bgimagedata . '" '
-            . 'xlink:href="' . $bgimagedata . '" />';
-    }
-
-    /**
      * Collect every marker placed by the student and pre-compute its dot
      * position in canvas points along with the label width estimate.
      *
+     * @param array $canvas Canvas geometry produced by build_canvas_geometry().
+     * @param array<int, string> $chosenhits Map placeno => "$choice $itemno"
+     *      from compute_chosen_hits(); used to label each marker correct/wrong.
      * @return array<int, array{cx:float, cy:float, label:string, iscorrect:bool, textwidth:float}>
      */
-    private function collect_markers(array $canvas): array {
+    private function collect_markers(array $canvas, array $chosenhits): array {
         $markers = [];
+        $hitset = array_flip($chosenhits);
         $question = $this->questionattempt->get_question();
-        $orderedchoices = $question->get_ordered_choices(1);
 
-        foreach ($orderedchoices as $choiceno => $drag) {
+        foreach ($question->get_ordered_choices(1) as $choiceno => $drag) {
             $coordstring = (string) $this->questionattempt->get_last_qt_var('c' . $choiceno);
             if (trim($coordstring) === '') {
                 continue;
             }
 
-            foreach (explode(';', $coordstring) as $rawcoord) {
+            foreach (explode(';', $coordstring) as $itemno => $rawcoord) {
                 $rawcoord = trim($rawcoord);
                 if ($rawcoord === '') {
                     continue;
@@ -224,7 +426,7 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
                     'cx' => $canvas['imgx'] + ($point[0] * $canvas['scale']),
                     'cy' => $canvas['imgy'] + ($point[1] * $canvas['scale']),
                     'label' => $label,
-                    'iscorrect' => $this->is_marker_correct($choiceno, $point),
+                    'iscorrect' => isset($hitset["$choiceno $itemno"]),
                     'textwidth' => $this->estimate_text_width($label),
                 ];
             }
@@ -242,7 +444,7 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
      */
     private function initial_occupied_boxes(array $markers): array {
         $boxes = [];
-        $r = self::DOT_RADIUS_PT + 1;
+        $r = (self::CROSSHAIR_SIZE_PT / 2) + 1;
         foreach ($markers as $marker) {
             $boxes[] = [$marker['cx'] - $r, $marker['cy'] - $r, $marker['cx'] + $r, $marker['cy'] + $r];
         }
@@ -250,7 +452,11 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Render a marker (dot + connector line + halo label + correctness icon).
+     * Render a marker, mirroring Moodle's native runtime display:
+     * a Font Awesome crosshair target at the dropped position plus a white
+     * translucent rounded pill carrying the markertext (and, when correctness
+     * is shown, the check / cross icon inside the pill, to the right of the
+     * text).
      *
      * @param array $marker Marker descriptor produced by collect_markers().
      * @param array<int, array{0:float,1:float,2:float,3:float}> &$occupiedboxes Already-placed bounding boxes.
@@ -260,41 +466,62 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
         $cx = $marker['cx'];
         $cy = $marker['cy'];
 
-        $dotsvg = '<circle cx="' . $cx . '" cy="' . $cy . '" '
-            . 'r="' . self::DOT_RADIUS_PT . '" '
-            . 'fill="#cc6600" stroke="#ffffff" stroke-width="1.5"/>';
+        $crosshairsvg = $this->build_crosshair_svg($cx, $cy);
 
-        $labelplacement = $this->find_label_position($cx, $cy, $marker['textwidth'], $occupiedboxes);
+        $showcorrect = $this->should_show_correctness();
+        $textwidth = $marker['textwidth'];
+        $totalwidth = $textwidth;
+        if ($showcorrect) {
+            $totalwidth += self::CORRECTNESS_ICON_GAP_PT + self::FONT_SIZE_PT;
+        }
+
+        $labelplacement = $this->find_label_position($cx, $cy, $totalwidth, $occupiedboxes);
         $occupiedboxes[] = $labelplacement['box'];
 
         $connectorsvg = $this->build_connector_line($cx, $cy, $labelplacement);
-        $labelsvg = $this->build_halo_label(
-            $labelplacement['tx'], $labelplacement['ty'], $labelplacement['anchor'],
-            $marker['label']
+        $pillsvg = $this->build_pill_label(
+            $labelplacement['box'], $marker['label'], $textwidth, $showcorrect, $marker['iscorrect']
         );
 
-        $iconsvg = '';
-        if ($this->should_show_correctness()) {
-            $iconanchor = $this->compute_correctness_icon_anchor($labelplacement, $marker['textwidth']);
-            $iconsvg = $this->build_correctness_svg(
-                $marker['iscorrect'],
-                $iconanchor[0], $iconanchor[1],
-                self::FONT_SIZE_PT
-            );
-        }
-
-        return $connectorsvg . $dotsvg . $labelsvg . $iconsvg;
+        return $connectorsvg . $crosshairsvg . $pillsvg;
     }
 
     /**
-     * Search for a label position around the dot that does not collide with
-     * boxes already placed on the canvas. Order of preference: below, above,
-     * right, left. Falls back to "below" if everything collides.
-     *
-     * @return array{tx:float, ty:float, anchor:string, side:string, box:array{0:float,1:float,2:float,3:float}}
+     * Render a crosshair target (Font Awesome `crosshairs` icon) centred on
+     * the dropped position. The path is inlined to avoid hitting Moodle's
+     * theme image endpoint at PDF generation time (which would require the
+     * user session and break async exports).
      */
-    private function find_label_position(float $cx, float $cy, float $textwidth, array $occupiedboxes): array {
-        $candidates = $this->build_label_candidates($cx, $cy, $textwidth);
+    private function build_crosshair_svg(float $cx, float $cy): string {
+        $size = self::CROSSHAIR_SIZE_PT;
+        $half = $size / 2;
+        $scale = $size / 512;
+        $tx = $cx - $half;
+        $ty = $cy - $half;
+        $path = 'M256 0c17.7 0 32 14.3 32 32V42.4c93.7 13.9 167.7 88 181.6 181.6H480'
+            . 'c17.7 0 32 14.3 32 32s-14.3 32-32 32H469.6c-13.9 93.7-88 167.7-181.6 181.6V480'
+            . 'c0 17.7-14.3 32-32 32s-32-14.3-32-32V469.6C130.3 455.7 56.3 381.7 42.4 288H32'
+            . 'c-17.7 0-32-14.3-32-32s14.3-32 32-32H42.4C56.3 130.3 130.3 56.3 224 42.4V32'
+            . 'c0-17.7 14.3-32 32-32zM107.4 288c12.5 58.3 58.4 104.1 116.6 116.6V384'
+            . 'c0-17.7 14.3-32 32-32s32 14.3 32 32v20.6c58.3-12.5 104.1-58.4 116.6-116.6H384'
+            . 'c-17.7 0-32-14.3-32-32s14.3-32 32-32h20.6C392.1 165.7 346.3 119.9 288 107.4V128'
+            . 'c0 17.7-14.3 32-32 32s-32-14.3-32-32V107.4C165.7 119.9 119.9 165.7 107.4 224H128'
+            . 'c17.7 0 32 14.3 32 32s-14.3 32-32 32H107.4zM256 224a32 32 0 1 1 0 64 32 32 0 1 1 0-64z';
+        return '<g transform="translate(' . $tx . ' ' . $ty . ') scale(' . $scale . ')" '
+            . 'fill="#000000">'
+            . '<path d="' . $path . '"/>'
+            . '</g>';
+    }
+
+    /**
+     * Search for a pill position around the crosshair that does not collide
+     * with boxes already placed on the canvas. Order of preference: below,
+     * above, right, left. Falls back to "below" when everything collides.
+     *
+     * @return array{side:string, box:array{0:float,1:float,2:float,3:float}}
+     */
+    private function find_label_position(float $cx, float $cy, float $totalwidth, array $occupiedboxes): array {
+        $candidates = $this->build_label_candidates($cx, $cy, $totalwidth);
         foreach ($candidates as $candidate) {
             if (!$this->box_collides($candidate['box'], $occupiedboxes)) {
                 return $candidate;
@@ -304,54 +531,51 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Build the ordered list of candidate label positions around a dot.
+     * Build the ordered list of candidate pill positions around a crosshair.
      *
-     * Each entry holds the SVG text anchor coordinates plus a bounding box
-     * used for collision detection.
+     * Each entry holds a 'side' (used by the connector line) and a 'box'
+     * (used for collision detection and as the pill's drawing area).
+     *
+     * @return array<int, array{side:string, box:array{0:float,1:float,2:float,3:float}}>
      */
-    private function build_label_candidates(float $cx, float $cy, float $textwidth): array {
+    private function build_label_candidates(float $cx, float $cy, float $totalwidth): array {
         $font = self::FONT_SIZE_PT;
-        $halfwidth = $textwidth / 2;
+        $halfwidth = $totalwidth / 2;
         $halfheight = $font / 2;
-        $offset = self::DOT_RADIUS_PT + self::LABEL_OFFSET_PT;
-        $textbaselineadjust = $font * 0.3;
+        $offset = (self::CROSSHAIR_SIZE_PT / 2) + self::LABEL_OFFSET_PT;
+        $hpad = 4;
+        $vpad = 3;
 
-        $candidates = [
-            // Below: text-anchor middle, baseline below the dot.
+        return [
             [
                 'side' => 'below',
-                'tx' => $cx,
-                'ty' => $cy + $offset + $font,
-                'anchor' => 'middle',
-                'box' => [$cx - $halfwidth - 2, $cy + $offset, $cx + $halfwidth + 2, $cy + $offset + $font + 4],
+                'box' => [
+                    $cx - $halfwidth - $hpad, $cy + $offset,
+                    $cx + $halfwidth + $hpad, $cy + $offset + $font + (2 * $vpad),
+                ],
             ],
-            // Above
             [
                 'side' => 'above',
-                'tx' => $cx,
-                'ty' => $cy - $offset - $textbaselineadjust,
-                'anchor' => 'middle',
-                'box' => [$cx - $halfwidth - 2, $cy - $offset - $font - 4, $cx + $halfwidth + 2, $cy - $offset],
+                'box' => [
+                    $cx - $halfwidth - $hpad, $cy - $offset - $font - (2 * $vpad),
+                    $cx + $halfwidth + $hpad, $cy - $offset,
+                ],
             ],
-            // Right
             [
                 'side' => 'right',
-                'tx' => $cx + $offset,
-                'ty' => $cy + $textbaselineadjust,
-                'anchor' => 'start',
-                'box' => [$cx + $offset, $cy - $halfheight - 2, $cx + $offset + $textwidth + 4, $cy + $halfheight + 2],
+                'box' => [
+                    $cx + $offset, $cy - $halfheight - $vpad,
+                    $cx + $offset + $totalwidth + (2 * $hpad), $cy + $halfheight + $vpad,
+                ],
             ],
-            // Left
             [
                 'side' => 'left',
-                'tx' => $cx - $offset,
-                'ty' => $cy + $textbaselineadjust,
-                'anchor' => 'end',
-                'box' => [$cx - $offset - $textwidth - 4, $cy - $halfheight - 2, $cx - $offset, $cy + $halfheight + 2],
+                'box' => [
+                    $cx - $offset - $totalwidth - (2 * $hpad), $cy - $halfheight - $vpad,
+                    $cx - $offset, $cy + $halfheight + $vpad,
+                ],
             ],
         ];
-
-        return $candidates;
     }
 
     /**
@@ -404,54 +628,61 @@ class ddmarker_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Render a label with a white halo behind bold orange text.
-     */
-    private function build_halo_label(float $tx, float $ty, string $anchor, string $label): string {
-        $strokewidth = self::FONT_SIZE_PT * 0.4;
-        $common = 'x="' . $tx . '" y="' . $ty . '" '
-            . 'text-anchor="' . $anchor . '" '
-            . 'font-family="Helvetica, Arial, sans-serif" '
-            . 'font-size="' . self::FONT_SIZE_PT . '" '
-            . 'font-weight="bold"';
-        $escaped = $this->svg_escape($label);
-        return '<text ' . $common . ' fill="#ffffff" stroke="#ffffff" '
-            . 'stroke-width="' . $strokewidth . '" stroke-linejoin="round">' . $escaped . '</text>'
-            . '<text ' . $common . ' fill="#cc6600">' . $escaped . '</text>';
-    }
-
-    /**
-     * Where to anchor the correctness icon relative to the label box.
+     * Render the Moodle-style markertext pill: a white translucent rounded
+     * rectangle with a black border carrying the marker label, and, when
+     * correctness display is enabled, the check / cross icon to the right of
+     * the text inside the same pill.
      *
-     * @return array{0:float,1:float} Icon centre coordinates.
+     * @param array{0:float,1:float,2:float,3:float} $box Pill bounding box.
+     * @param string $text       The markertext.
+     * @param float  $textwidth  Estimated rendered width of $text alone.
+     * @param bool   $showcorrect Whether the correctness icon must be drawn.
+     * @param bool   $iscorrect  Whether the marker is correctly placed.
      */
-    private function compute_correctness_icon_anchor(array $labelplacement, float $textwidth): array {
-        list($x1, $y1, $x2, $y2) = $labelplacement['box'];
+    private function build_pill_label(
+        array $box,
+        string $text,
+        float $textwidth,
+        bool $showcorrect,
+        bool $iscorrect
+    ): string {
+        [$x1, $y1, $x2, $y2] = $box;
+        $pillw = $x2 - $x1;
+        $pillh = $y2 - $y1;
         $cy = ($y1 + $y2) / 2;
-        return [$x2 + (self::FONT_SIZE_PT * 0.6), $cy];
-    }
+        $textbaseline = $cy + (self::FONT_SIZE_PT * 0.3);
+        $escaped = $this->svg_escape($text);
 
-    /**
-     * Determine whether a marker placed at the given image-space coordinates
-     * falls inside any drop zone whose right answer is this choice.
-     *
-     * @param int $choiceno
-     * @param array{0:int,1:int} $point Marker coordinates in original image pixels.
-     */
-    private function is_marker_correct(int $choiceno, array $point): bool {
-        $question = $this->questionattempt->get_question();
-        if (empty($question->places)) {
-            return false;
+        $svg = '<rect x="' . $x1 . '" y="' . $y1 . '" '
+            . 'width="' . $pillw . '" height="' . $pillh . '" '
+            . 'rx="' . self::PILL_BORDER_RADIUS_PT . '" '
+            . 'ry="' . self::PILL_BORDER_RADIUS_PT . '" '
+            . 'fill="#ffffff" fill-opacity="0.6" '
+            . 'stroke="#000000" stroke-opacity="0.7" '
+            . 'stroke-width="' . self::PILL_BORDER_WIDTH_PT . '"/>';
+
+        if ($showcorrect) {
+            // Layout inside the pill: [text][gap][icon], horizontally centred.
+            $contentw = $textwidth + self::CORRECTNESS_ICON_GAP_PT + self::FONT_SIZE_PT;
+            $startx = $x1 + (($pillw - $contentw) / 2);
+            $iconcx = $startx + $textwidth + self::CORRECTNESS_ICON_GAP_PT + (self::FONT_SIZE_PT / 2);
+
+            $svg .= '<text x="' . $startx . '" y="' . $textbaseline . '" '
+                . 'text-anchor="start" '
+                . 'font-family="Helvetica, Arial, sans-serif" '
+                . 'font-size="' . self::FONT_SIZE_PT . '" '
+                . 'fill="#000000">' . $escaped . '</text>'
+                . $this->build_correctness_svg($iscorrect, $iconcx, $cy, self::FONT_SIZE_PT);
+        } else {
+            $tx = ($x1 + $x2) / 2;
+            $svg .= '<text x="' . $tx . '" y="' . $textbaseline . '" '
+                . 'text-anchor="middle" '
+                . 'font-family="Helvetica, Arial, sans-serif" '
+                . 'font-size="' . self::FONT_SIZE_PT . '" '
+                . 'fill="#000000">' . $escaped . '</text>';
         }
-        foreach ($question->places as $placeno => $place) {
-            $rightchoice = $question->get_right_choice_for($placeno);
-            if ((int) $rightchoice !== $choiceno) {
-                continue;
-            }
-            if ($place->drop_hit($point)) {
-                return true;
-            }
-        }
-        return false;
+
+        return $svg;
     }
 
     /**

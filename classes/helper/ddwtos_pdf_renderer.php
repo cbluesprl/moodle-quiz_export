@@ -61,7 +61,7 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
         $html = $this->fill_drop_zones($this->questionhtml, $responses);
         $html = $this->replace_drag_homes_container(
             $html,
-            $this->render_unplaced_section($this->build_unplaced_pill_contents($responses))
+            $this->render_unplaced_section($this->build_unplaced_pills($responses))
         );
         return $html;
     }
@@ -187,14 +187,14 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
     }
 
     /**
-     * Build the inner HTML for each unplaced choice's pill: the label
-     * formatted via Moodle filters, exactly as draghomes appear in the
-     * interactive review.
+     * Build the list of fully-styled draghome-look pills for unplaced choices,
+     * formatted via Moodle filters and wrapped in a span that mirrors the
+     * `.draghome` runtime appearance (white background, 1px black border).
      *
      * @param array<int, int> $responses Map placeno => choiceorder index.
      * @return array<int, string>
      */
-    private function build_unplaced_pill_contents(array $responses): array {
+    private function build_unplaced_pills(array $responses): array {
         $question = $this->questionattempt->get_question();
 
         $usedkeys = [];
@@ -211,16 +211,48 @@ class ddwtos_pdf_renderer extends abstract_qtype_pdf_renderer {
         }
 
         $context = \context::instance_by_id($question->contextid);
-        $contents = [];
+        $pills = [];
         foreach ($question->choices as $groupid => $groupchoices) {
             $groupid = (int) $groupid;
             foreach ($groupchoices as $choicekey => $choice) {
                 if (isset($usedkeys[$groupid][(int) $choicekey])) {
                     continue;
                 }
-                $contents[] = question_utils::format_question_fragment((string) $choice->text, $context);
+                $contenthtml = question_utils::format_question_fragment((string) $choice->text, $context);
+                $pills[] = $this->build_unplaced_pill($contenthtml);
             }
         }
-        return $contents;
+        return $pills;
+    }
+
+    /**
+     * Wrap an already-formatted choice fragment in a Moodle-style draghome
+     * pill. Multi-line content is split on `<br>` and rendered as stacked
+     * `<div>` lines, since mPDF does not flow `<br>` reliably inside an
+     * `inline-block` container.
+     */
+    private function build_unplaced_pill(string $contenthtml): string {
+        $contenthtml = trim($contenthtml);
+        if ($contenthtml === '') {
+            return '';
+        }
+
+        // Normalise to the XHTML self-closing form; with explicit dimensions on
+        // the outer inline-block span, mPDF treats <br /> as an in-box line
+        // break rather than splitting the container.
+        $contenthtml = preg_replace('#<br\s*/?>#i', '<br />', $contenthtml);
+
+        $style = 'display:inline-block; '
+            . 'padding: 3pt 6pt; '
+            . 'border: 1px solid #000; '
+            . 'background-color: #ffffff; '
+            . 'color: #000; '
+            . 'font-family: Arial, Helvetica, sans-serif; '
+            . 'font-size: 11pt; '
+            . 'line-height: 1.231; '
+            . 'margin: 3pt; '
+            . 'text-align: center; '
+            . 'vertical-align: middle;';
+        return '<span style="' . $style . '">' . $contenthtml . '</span>';
     }
 }

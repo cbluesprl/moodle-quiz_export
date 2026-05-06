@@ -78,12 +78,6 @@ class quiz_export_engine
         $tmp_pdf_file = $tmp_file . ".pdf";
         rename($tmp_file, $tmp_pdf_file);
         chmod($tmp_pdf_file, 0644);
-        ob_start();
-        $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
-        ob_get_clean();
-        $tmp_err_file = $tmp_file . ".txt";
-        rename($tmp_file, $tmp_err_file);
-        chmod($tmp_err_file, 0644);
 
         $pdf = new \Mpdf\Mpdf([
             'tempDir' => $tmp_dir,
@@ -168,7 +162,6 @@ class quiz_export_engine
         $pdf->Output($tmp_pdf_file, \Mpdf\Output\Destination::FILE);
 
         // Cleanup
-        unlink($tmp_err_file);
         foreach ($html_files as $file) {
             unlink($file);
         }
@@ -486,42 +479,187 @@ class quiz_export_engine
     }
 
     /**
-     * Encode all images in base64 to render it in the pdf
+     * Embed every image in the HTML as a base64 data URI so mPDF can render
+     * them without making external HTTP calls.
      *
-     * @param $html
-     * @return string|string[]
+     * Local Moodle pluginfile URLs are resolved through the File API, which
+     * works in any execution context - including cron adhoc tasks where no
+     * HTTP session cookie is available. External URLs fall back to cURL
+     * and reuse the current session cookie when running inside an HTTP
+     * request, mirroring the original behaviour.
+     *
+     * @param string $html HTML produced by the quiz renderer.
+     * @return string HTML with images converted to inline data URIs.
      */
     protected function preloadImageWithCurrentSession($html)
     {
-        $matches = [];
-        $matches_content = [];
-        preg_match_all("/<img.*src=\"(https?:\/\/.*)\".*>/U", $html, $matches);
-
-        if (count($matches[1]) > 0) {
-            $cookieFile = '/tmp/cookie-pdf';
-            file_put_contents($cookieFile, "MoodleSession=" . $_COOKIE['MoodleSession']);
-            // Without that we have to wait the script eneded to load images => time out
-            session_write_close();
-            foreach ($matches[1] as $match) {
-                $ch = curl_init($match);
-                $strCookie = session_name() . '=' . $_COOKIE[session_name()] . '; path=/';
-                curl_setopt($ch, CURLOPT_COOKIE, $strCookie);
-                curl_setopt($ch, CURLOPT_HEADER, 0);
-                curl_setopt($ch, CURLOPT_NOBODY, 0);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-                // Timeout in seconds
-                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-                $header = curl_getinfo($ch);
-                $result = curl_exec($ch);
-                $finfo = new finfo(FILEINFO_MIME_TYPE);
-                $mimeType = $finfo->buffer($result);
-                $matches_content[] = "data:" . $mimeType . ";base64," . base64_encode($result);
-                curl_close($ch);
-            }
-            $html = str_replace($matches[1], $matches_content, $html);
+        if (!preg_match_all('/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/i', $html, $matches)) {
+            return $html;
         }
-        return $html;
+
+        $sessionclosed = false;
+        $replacements = [];
+        foreach (array_unique($matches[1]) as $src) {
+            $datauri = $this->image_url_to_data_uri($src, $sessionclosed);
+            if ($datauri !== null) {
+                $replacements[$src] = $datauri;
+            }
+        }
+
+        if (empty($replacements)) {
+            return $html;
+        }
+
+        return str_replace(array_keys($replacements), array_values($replacements), $html);
+    }
+
+    /**
+     * Convert one image URL to a base64 data URI for inline PDF rendering.
+     *
+     * Local pluginfile URLs are resolved via the File API; external URLs
+     * fall back to a cURL request that re-uses the current session cookie
+     * when available.
+     *
+     * @param string $src Image URL extracted from the rendered HTML.
+     * @param bool $sessionclosed Mutable flag tracking whether the PHP
+     *                            session has already been written-and-closed
+     *                            during this call.
+     * @return string|null Data URI, or null when the image cannot be loaded.
+     */
+    protected function image_url_to_data_uri(string $src, bool &$sessionclosed): ?string
+    {
+        global $CFG;
+
+        $absolute = $src;
+        if (strpos($absolute, '//') === 0) {
+            $absolute = (function_exists('is_https') && is_https() ? 'https:' : 'http:') . $absolute;
+        } else if (strpos($absolute, '/') === 0) {
+            $absolute = $CFG->wwwroot . $absolute;
+        } else if (preg_match('#^https?://#i', $absolute) !== 1) {
+            return null;
+        }
+
+        $content = $this->resolve_pluginfile_content($absolute);
+        if ($content === null) {
+            $content = $this->fetch_remote_image($absolute, $sessionclosed);
+        }
+        if ($content === null || $content === '') {
+            return null;
+        }
+
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mimetype = $finfo->buffer($content);
+        if (!is_string($mimetype) || strpos($mimetype, 'image/') !== 0) {
+            return null;
+        }
+
+        return 'data:' . $mimetype . ';base64,' . base64_encode($content);
+    }
+
+    /**
+     * Resolve a Moodle pluginfile URL to the underlying file content.
+     *
+     * Mirrors the routing performed by file_pluginfile() / quiz_question_pluginfile()
+     * so local URLs can be served without an HTTP round trip - and without
+     * requiring an authenticated session, which is critical for the cron
+     * exports.
+     *
+     * @param string $url Absolute URL.
+     * @return string|null Binary file content, or null when not resolvable.
+     */
+    protected function resolve_pluginfile_content(string $url): ?string
+    {
+        global $CFG;
+
+        $base = rtrim($CFG->wwwroot, '/') . '/pluginfile.php/';
+        if (strpos($url, $base) !== 0) {
+            return null;
+        }
+
+        $path = parse_url(substr($url, strlen($base)), PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            return null;
+        }
+
+        $parts = array_map('rawurldecode', explode('/', $path));
+        if (count($parts) < 4) {
+            return null;
+        }
+
+        $contextid = (int) array_shift($parts);
+        $component = (string) array_shift($parts);
+        $filearea = (string) array_shift($parts);
+
+        // The "question" component prepends qubaid and slot to the args.
+        // They are part of the URL routing only - not of the stored file
+        // path - so they must be stripped before computing the hash.
+        if ($component === 'question' && count($parts) >= 3) {
+            array_shift($parts);
+            array_shift($parts);
+        }
+
+        if (empty($parts)) {
+            return null;
+        }
+
+        $fullpath = '/' . $contextid . '/' . $component . '/' . $filearea . '/' . implode('/', $parts);
+        $file = get_file_storage()->get_file_by_hash(sha1($fullpath));
+        if (!$file || $file->is_directory()) {
+            return null;
+        }
+
+        return $file->get_content();
+    }
+
+    /**
+     * Fetch a remote image via cURL.
+     *
+     * Used as a fallback for URLs that are not Moodle pluginfile URLs
+     * (typically third-party images embedded in question text). Reuses
+     * the current session cookie when running inside an HTTP request so
+     * authenticated CDN URLs keep working in the synchronous export
+     * path. In CLI / cron context the request is anonymous.
+     *
+     * @param string $url Absolute URL.
+     * @param bool $sessionclosed Mutable flag tracking whether the PHP
+     *                            session has already been closed during
+     *                            the current call.
+     * @return string|null Binary content, or null on HTTP failure.
+     */
+    protected function fetch_remote_image(string $url, bool &$sessionclosed): ?string
+    {
+        $cookie = null;
+        if (!CLI_SCRIPT) {
+            $sessionname = session_name();
+            if ($sessionname !== '' && !empty($_COOKIE[$sessionname])) {
+                $cookie = $sessionname . '=' . $_COOKIE[$sessionname] . '; path=/';
+                if (!$sessionclosed) {
+                    // Release the session lock so concurrent image fetches
+                    // don't queue behind the running export request.
+                    session_write_close();
+                    $sessionclosed = true;
+                }
+            }
+        }
+
+        $ch = curl_init($url);
+        if ($cookie !== null) {
+            curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+        }
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_NOBODY, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        $result = curl_exec($ch);
+        $httpcode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($result === false || $httpcode >= 400 || $result === '') {
+            return null;
+        }
+
+        return $result;
     }
 
     /**

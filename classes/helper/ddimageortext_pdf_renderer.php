@@ -36,22 +36,40 @@ defined('MOODLE_INTERNAL') || die();
  */
 class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
 
-    private const IMAGE_WIDTH_PT = 480.0;
-    private const CANVAS_PADDING_PT = 60.0;
-    private const BASE_FONT_PT = 12.0;
+    /** @var float Default text size in canvas points; mirrors Moodle's 13px/1.231 arial draghome font. */
+    private const BASE_FONT_PT = 11.0;
+
+    /** @var float Lower bound for auto-shrinking when the text is too wide for its dropzone. */
     private const MIN_FONT_PT = 7.5;
-    private const MAX_LABEL_CHARS = 16;
-    private const DROPZONE_PADDING_X = 4.0;
-    private const DROPZONE_PADDING_Y = 3.0;
-    private const CHAR_WIDTH_RATIO = 0.55;
+
+    /** @var float Inner horizontal padding of the dropzone, in canvas points. */
+    private const DROPZONE_PADDING_X = 5.0;
+
+    /** @var float Inner vertical padding of the dropzone, in canvas points. */
+    private const DROPZONE_PADDING_Y = 4.0;
+
+    /** @var float Minimum drop zone width when no choice has been measured yet. */
     private const MIN_DROPZONE_WIDTH = 32.0;
+
+    /** @var float Minimum drop zone height when no choice has been measured yet. */
     private const MIN_DROPZONE_HEIGHT = 18.0;
+
+    /** @var float Line height multiplier used both for measuring and rendering. */
+    private const LINE_HEIGHT_RATIO = 1.231;
+
     private const BORDER_CORRECT = '#2a8a2a';
     private const BORDER_INCORRECT = '#c83737';
     private const BORDER_NEUTRAL = '#888888';
-    private const BORDER_WIDTH_PT = 2.0;
-    private const DROPZONE_FILL = 'rgba(255, 255, 255, 0.5)';
-    private const TEXT_COLOR = '#cc6600';
+
+    /** @var float Border stroke width in canvas points; mirrors Moodle's 1px border. */
+    private const BORDER_WIDTH_PT = 1.0;
+
+    /** @var float Fill opacity used for an empty drop zone (mirrors Moodle .dropzone opacity:0.5). */
+    private const EMPTY_FILL_OPACITY = 0.5;
+
+    /** @var string Text colour inside the placed draghome (Moodle uses default body colour). */
+    private const TEXT_COLOR = '#000000';
+
     private const CORRECTNESS_ICON_SIZE_PT = 8.0;
     private const CORRECTNESS_ICON_INSET_PT = 3.0;
 
@@ -95,11 +113,9 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . $svgcontent
             . '</svg></div>';
 
-        $unplacedhtml = $this->render_unplaced_section(
-            $this->build_unplaced_pill_contents($responses)
-        );
+        $unplacedsvg = $this->render_unplaced_svg($responses, $groupdims, $canvas);
 
-        return $this->replace_div_with_class('ddarea', $svgblock . $unplacedhtml);
+        return $this->replace_div_with_class('ddarea', $svgblock . $unplacedsvg);
     }
 
     /**
@@ -116,29 +132,6 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             $responses[(int) $placeno] = $value !== null ? (int) $value : 0;
         }
         return $responses;
-    }
-
-    private function build_canvas_geometry(int $imagewidth, int $imageheight): array {
-        $imgw = self::IMAGE_WIDTH_PT;
-        $imgh = ($imageheight / $imagewidth) * $imgw;
-        $padding = self::CANVAS_PADDING_PT;
-        return [
-            'totalw' => $imgw + (2 * $padding),
-            'totalh' => $imgh + (2 * $padding),
-            'imgx' => $padding,
-            'imgy' => $padding,
-            'imgw' => $imgw,
-            'imgh' => $imgh,
-            'padding' => $padding,
-            'scale' => $imgw / $imagewidth,
-        ];
-    }
-
-    private function build_background_svg(string $bgimagedata, array $canvas): string {
-        return '<image x="' . $canvas['imgx'] . '" y="' . $canvas['imgy'] . '" '
-            . 'width="' . $canvas['imgw'] . '" height="' . $canvas['imgh'] . '" '
-            . 'href="' . $bgimagedata . '" '
-            . 'xlink:href="' . $bgimagedata . '" />';
     }
 
     private function render_dropzone(
@@ -158,16 +151,22 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
 
         $iscorrect = false;
         if ($responsevalue === 0) {
+            // Empty drop zone: render Moodle's `.dropzone` (white at 0.5 opacity, neutral border).
             $bordercolor = self::BORDER_NEUTRAL;
+            $fillcolor = '#ffffff';
+            $fillopacity = self::EMPTY_FILL_OPACITY;
         } else {
+            // Filled drop zone: render Moodle's `.draghome.placed.groupX` (group colour, full opacity)
+            // with the correctness border on top.
             $iscorrect = $this->is_correct_response($placeno, $responsevalue);
             $bordercolor = $iscorrect ? self::BORDER_CORRECT : self::BORDER_INCORRECT;
+            $fillcolor = $this->get_group_fill_color($group);
+            $fillopacity = 1.0;
         }
 
         $svg = '<rect x="' . $dzleft . '" y="' . $dztop . '" '
             . 'width="' . $dzwidth . '" height="' . $dzheight . '" '
-            . 'rx="2" ry="2" '
-            . 'fill="' . self::DROPZONE_FILL . '" '
+            . 'fill="' . $fillcolor . '" fill-opacity="' . $fillopacity . '" '
             . 'stroke="' . $bordercolor . '" stroke-width="' . self::BORDER_WIDTH_PT . '"/>';
 
         if ($responsevalue === 0) {
@@ -188,6 +187,42 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             $dzleft, $dztop, $dzwidth, $dzheight
         );
         return $svg;
+    }
+
+    /**
+     * Map a Moodle ddimageortext group number to the background colour applied
+     * by the corresponding `.groupN` rule in question/type/ddimageortext/styles.css.
+     */
+    private function get_group_fill_color(int $group): string {
+        static $colors = [
+            1 => '#ffffff',
+            2 => '#b0c4de',
+            3 => '#dcdcdc',
+            4 => '#d8bfd8',
+            5 => '#87cefa',
+            6 => '#daa520',
+            7 => '#ffd700',
+            8 => '#f0e68c',
+        ];
+        return $colors[$group] ?? '#ffffff';
+    }
+
+    /**
+     * Convert a choice's HTML text into a list of lines, honouring `<br>` tags
+     * exactly as Moodle's runtime renders them inside a draghome.
+     *
+     * @return array<int, string> Plain-text lines, empty when the choice has no text.
+     */
+    private function extract_text_lines(string $html): array {
+        $normalized = preg_replace('#<br\s*/?>#i', "\n", $html);
+        $stripped = strip_tags((string) $normalized);
+        $lines = preg_split('/\r?\n/', $stripped);
+        if ($lines === false) {
+            return [];
+        }
+        $lines = array_map('trim', $lines);
+        $lines = array_values(array_filter($lines, fn($line) => $line !== ''));
+        return $lines;
     }
 
     /**
@@ -267,9 +302,17 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
         if ($info !== null) {
             return [$info['width'] * $scale, $info['height'] * $scale];
         }
-        $label = $this->truncate_label(strip_tags((string) ($choice->text ?? '')));
-        $textwidth = max(1, mb_strlen($label)) * (self::BASE_FONT_PT * self::CHAR_WIDTH_RATIO);
-        $textheight = self::BASE_FONT_PT * 1.3;
+        $lines = $this->extract_text_lines((string) ($choice->text ?? ''));
+        if (empty($lines)) {
+            return [0.0, 0.0];
+        }
+        $maxchars = 0;
+        foreach ($lines as $line) {
+            $maxchars = max($maxchars, mb_strlen($line));
+        }
+        $maxchars = max(1, $maxchars);
+        $textwidth = $maxchars * (self::BASE_FONT_PT * self::CHAR_WIDTH_RATIO);
+        $textheight = count($lines) * self::BASE_FONT_PT * self::LINE_HEIGHT_RATIO;
         return [$textwidth, $textheight];
     }
 
@@ -285,8 +328,8 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
         if ($info !== null) {
             return $this->render_image_in_dropzone($info, $dzleft, $dztop, $dzwidth, $dzheight, $scale);
         }
-        $label = $this->truncate_label(strip_tags((string) ($choice->text ?? '')));
-        return $this->render_text_in_dropzone($label, $dzleft, $dztop, $dzwidth, $dzheight);
+        $lines = $this->extract_text_lines((string) ($choice->text ?? ''));
+        return $this->render_text_in_dropzone($lines, $dzleft, $dztop, $dzwidth, $dzheight);
     }
 
     private function render_image_in_dropzone(
@@ -315,49 +358,139 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             . 'href="' . $info['data'] . '" xlink:href="' . $info['data'] . '" />';
     }
 
+    /**
+     * Render the placed draghome text using the same multi-line/font behaviour
+     * as Moodle's `.draghome` (`<br>`-separated lines, Arial-family, normal weight).
+     *
+     * @param array<int, string> $lines Plain-text lines extracted from the choice.
+     */
     private function render_text_in_dropzone(
-        string $label,
+        array $lines,
         float $dzleft,
         float $dztop,
         float $dzwidth,
         float $dzheight
     ): string {
-        $availw = max(1.0, $dzwidth - (self::DROPZONE_PADDING_X * 2));
-        $availh = max(1.0, $dzheight - (self::DROPZONE_PADDING_Y * 2));
-        $charcount = max(1, mb_strlen($label));
-
-        $widthbasedsize = $availw / ($charcount * self::CHAR_WIDTH_RATIO);
-        $heightbasedsize = $availh / 1.2;
-        $fontsize = max(self::MIN_FONT_PT, min(self::BASE_FONT_PT, $widthbasedsize, $heightbasedsize));
-
-        $cx = $dzleft + ($dzwidth / 2);
-        $cy = $dztop + ($dzheight / 2);
-        $textbaseline = $cy + ($fontsize * 0.3);
-
-        return '<text x="' . $cx . '" y="' . $textbaseline . '" '
-            . 'text-anchor="middle" '
-            . 'font-family="Helvetica, Arial, sans-serif" '
-            . 'font-size="' . $fontsize . '" '
-            . 'font-weight="bold" '
-            . 'fill="' . self::TEXT_COLOR . '">'
-            . $this->svg_escape($label)
-            . '</text>';
-    }
-
-    private function truncate_label(string $label): string {
-        if (mb_strlen($label) <= self::MAX_LABEL_CHARS) {
-            return $label;
+        if (empty($lines)) {
+            return '';
         }
-        return mb_substr($label, 0, self::MAX_LABEL_CHARS - 3) . '...';
+        $fontsize = $this->compute_label_fontsize($lines, $dzwidth, $dzheight);
+
+        $lineheight = $fontsize * self::LINE_HEIGHT_RATIO;
+        $totalheight = count($lines) * $lineheight;
+        $cx = $dzleft + ($dzwidth / 2);
+        // Vertically centre the block of lines and use the typical 0.8 ascent ratio
+        // so the first baseline sits close to the visual top of the first line.
+        $blocktop = $dztop + (($dzheight - $totalheight) / 2);
+        $firstbaseline = $blocktop + ($fontsize * 0.8);
+
+        $svg = '';
+        foreach ($lines as $i => $line) {
+            $y = $firstbaseline + ($i * $lineheight);
+            $svg .= '<text x="' . $cx . '" y="' . $y . '" '
+                . 'text-anchor="middle" '
+                . 'font-family="Arial, Helvetica, sans-serif" '
+                . 'font-size="' . $fontsize . '" '
+                . 'fill="' . self::TEXT_COLOR . '">'
+                . $this->svg_escape($line)
+                . '</text>';
+        }
+        return $svg;
     }
 
     /**
-     * Build the inner HTML for each unplaced choice's pill.
+     * Auto-shrink the choice text font size so the longest line fits the
+     * available width and the full block fits the available height. Shared
+     * between the SVG drop zones and the HTML unplaced pills so a given
+     * choice ends up with the exact same on-page font size in both places.
+     *
+     * @param array<int, string> $lines Plain-text lines of the choice content.
+     * @param float $dzwidth  Outer drop zone width in canvas points.
+     * @param float $dzheight Outer drop zone height in canvas points.
+     */
+    private function compute_label_fontsize(array $lines, float $dzwidth, float $dzheight): float {
+        $availw = max(1.0, $dzwidth - (self::DROPZONE_PADDING_X * 2));
+        $availh = max(1.0, $dzheight - (self::DROPZONE_PADDING_Y * 2));
+
+        $maxchars = 0;
+        foreach ($lines as $line) {
+            $maxchars = max($maxchars, mb_strlen($line));
+        }
+        $maxchars = max(1, $maxchars);
+        $linecount = max(1, count($lines));
+
+        $widthbasedsize = $availw / ($maxchars * self::CHAR_WIDTH_RATIO);
+        $heightbasedsize = $availh / ($linecount * self::LINE_HEIGHT_RATIO);
+        return max(self::MIN_FONT_PT, min(self::BASE_FONT_PT, $widthbasedsize, $heightbasedsize));
+    }
+
+    /**
+     * Render the unplaced choices as a dedicated SVG block laid out in a
+     * grid below the main image. Reuses the very same drop-zone primitives
+     * (`<rect>` + auto-shrunk multi-line `<text>`) so an unplaced pill is
+     * visually identical to a placed one — same dimensions, same font, same
+     * multi-line behaviour — and we sidestep mPDF's flaky `<br>` /
+     * `inline-block` HTML interactions entirely.
+     */
+    private function render_unplaced_svg(array $responses, array $groupdims, array $canvas): string {
+        $items = $this->collect_unplaced_items($responses, $groupdims);
+        if (empty($items)) {
+            return '';
+        }
+
+        // Use a uniform pill size per row, taken from the largest group dims
+        // present in the unplaced set. Keeps rows aligned even with multiple groups.
+        $pillw = 0.0;
+        $pillh = 0.0;
+        foreach ($items as $item) {
+            $pillw = max($pillw, $item['dims']['width']);
+            $pillh = max($pillh, $item['dims']['height']);
+        }
+        $pillw = max($pillw, self::MIN_DROPZONE_WIDTH);
+        $pillh = max($pillh, self::MIN_DROPZONE_HEIGHT);
+
+        $hgap = 8.0;
+        $vgap = 6.0;
+        $vmargin = 12.0;
+        $totalwidth = $canvas['totalw'];
+
+        $cols = max(1, min(count($items), (int) floor($totalwidth / ($pillw + $hgap))));
+        $rows = (int) ceil(count($items) / $cols);
+
+        $gridwidth = $cols * $pillw + ($cols - 1) * $hgap;
+        $startx = ($totalwidth - $gridwidth) / 2;
+        $totalheight = ($vmargin * 2) + ($rows * $pillh) + (($rows - 1) * $vgap);
+
+        $svgcontent = '';
+        foreach ($items as $i => $item) {
+            $col = $i % $cols;
+            $row = (int) floor($i / $cols);
+            $x = $startx + $col * ($pillw + $hgap);
+            $y = $vmargin + $row * ($pillh + $vgap);
+            $svgcontent .= $this->render_unplaced_pill_svg(
+                $item, $x, $y, $pillw, $pillh, $canvas['scale']
+            );
+        }
+
+        return '<div style="margin-top:8pt; text-align:center;">'
+            . '<svg xmlns="http://www.w3.org/2000/svg" '
+            . 'xmlns:xlink="http://www.w3.org/1999/xlink" '
+            . 'viewBox="0 0 ' . $totalwidth . ' ' . $totalheight . '" '
+            . 'width="' . $totalwidth . '" '
+            . 'preserveAspectRatio="xMidYMid meet">'
+            . $svgcontent
+            . '</svg></div>';
+    }
+
+    /**
+     * Build the list of unplaced choices to render, each annotated with its
+     * group identifier and the matching drop-zone dimensions.
      *
      * @param array<int, int> $responses Map placeno => choiceorder index.
-     * @return array<int, string>
+     * @param array<int, array{width:float, height:float}> $groupdims
+     * @return array<int, array{choice:object, group:int, dims:array{width:float, height:float}}>
      */
-    private function build_unplaced_pill_contents(array $responses): array {
+    private function collect_unplaced_items(array $responses, array $groupdims): array {
         $question = $this->questionattempt->get_question();
 
         $usedkeys = [];
@@ -373,26 +506,45 @@ class ddimageortext_pdf_renderer extends abstract_qtype_pdf_renderer {
             $usedkeys[$group][$choicekey] = true;
         }
 
-        $contents = [];
+        $items = [];
         foreach ($question->choices as $groupid => $groupchoices) {
             $groupid = (int) $groupid;
+            $dims = $groupdims[$groupid]
+                ?? ['width' => self::MIN_DROPZONE_WIDTH, 'height' => self::MIN_DROPZONE_HEIGHT];
             foreach ($groupchoices as $choicekey => $choice) {
                 if (isset($usedkeys[$groupid][(int) $choicekey])) {
                     continue;
                 }
-                $contents[] = $this->build_unplaced_pill_content($choice);
+                $items[] = [
+                    'choice' => $choice,
+                    'group' => $groupid,
+                    'dims' => $dims,
+                ];
             }
         }
-        return $contents;
+        return $items;
     }
 
-    private function build_unplaced_pill_content($choice): string {
+    /**
+     * Render a single unplaced pill in the SVG grid, reusing the exact same
+     * primitives that render placed drop zones (group-coloured rect + image
+     * or auto-shrunk multi-line text).
+     */
+    private function render_unplaced_pill_svg(array $item, float $x, float $y, float $w, float $h, float $scale): string {
+        $bgcolor = $this->get_group_fill_color($item['group']);
+        $svg = '<rect x="' . $x . '" y="' . $y . '" '
+            . 'width="' . $w . '" height="' . $h . '" '
+            . 'fill="' . $bgcolor . '" '
+            . 'stroke="#000000" stroke-width="' . self::BORDER_WIDTH_PT . '"/>';
+
+        $choice = $item['choice'];
         $info = !empty($choice->id) ? $this->get_image_info('dragimage', (int) $choice->id) : null;
         if ($info !== null) {
-            return '<img src="' . $info['data'] . '" '
-                . 'style="max-height:24pt; vertical-align:middle;" alt=""/>';
+            $svg .= $this->render_image_in_dropzone($info, $x, $y, $w, $h, $scale);
+        } else {
+            $lines = $this->extract_text_lines((string) ($choice->text ?? ''));
+            $svg .= $this->render_text_in_dropzone($lines, $x, $y, $w, $h);
         }
-        $label = strip_tags((string) ($choice->text ?? ''));
-        return htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return $svg;
     }
 }
