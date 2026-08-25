@@ -25,6 +25,7 @@
 
 $string['pluginname'] = 'QuizExport';
 $string['export'] = 'Export Testversuche'; // displayed in the navigation menu
+$string['exportreport'] = 'Bericht Testversuch-Export'; // Used by mod/quiz/settings.php as the settings page title.
 
 $string['exportselected'] = 'Ausgewählte Versuche exportieren';
 

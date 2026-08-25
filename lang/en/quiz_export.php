@@ -25,6 +25,7 @@
 
 $string['pluginname'] = 'QuizExport';
 $string['export'] = 'Quiz exporting'; // displayed in the navigation menu
+$string['exportreport'] = 'Quiz export report'; // Used by mod/quiz/settings.php as the settings page title.
 
 $string['exportselected'] = 'Export selected attempts';
 
