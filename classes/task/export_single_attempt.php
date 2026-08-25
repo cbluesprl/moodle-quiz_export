@@ -51,6 +51,9 @@ class export_single_attempt extends export_task_base {
      * Expected custom data:
      * - attemptid (int): The quiz attempt ID.
      * - pagemode (int): The page break mode.
+     * - hidegeneralfeedback (int): Leave the general feedback out of the PDF.
+     * - hiderightanswer (int): Leave the correct answers out of the PDF.
+     * - hideresponsehistory (int): Leave the response history out of the PDF.
      * - inline (int): Whether the PDF was requested inline.
      * - userid (int): The user who requested the export.
      * - cmid (int): The course module ID for the quiz.
@@ -60,7 +63,7 @@ class export_single_attempt extends export_task_base {
 
         $data = $this->get_custom_data();
         $attemptid = $data->attemptid;
-        $pagemode = $data->pagemode;
+        $exportoptions = \quiz_export\pdf_options::from_data($data);
         $userid = $data->userid;
         $cmid = $data->cmid;
 
@@ -68,7 +71,7 @@ class export_single_attempt extends export_task_base {
         $attemptobj->preload_all_attempt_step_users();
 
         $exporter = new \quiz_export_engine();
-        $pdffile = $exporter->a2pdf($attemptobj, $pagemode);
+        $pdffile = $exporter->a2pdf($attemptobj, $exportoptions);
 
         $info = $exporter->get_additionnal_informations($attemptobj);
         $filename = $info['firstname'] . '_' . $info['lastname'] . '.pdf';

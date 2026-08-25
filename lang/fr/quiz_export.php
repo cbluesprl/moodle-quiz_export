@@ -35,10 +35,18 @@ $string['exportattempt'] = 'Exporter cette tentative en pdf';
 
 // export_form
 $string['exportsettings'] = 'Paramètres d\'export';
+$string['exportsettingsinfo'] = 'Ces réglages s\'appliquent aux exports lancés depuis cette page, aussi bien les liens d\'export individuel que l\'export groupé. Validez-les avant de lancer un export.';
+$string['applysettings'] = 'Appliquer les réglages';
 $string['pagemode'] = 'Mode de pagination (La manière dont vont être gérés les sauts de page lors de l\'export PDF)';
 $string['exportmodetruepage'] = 'Les pages de questions réellement posées';
 $string['exportmodequestionperpage'] = 'Une seule question par page';
 $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
+$string['hidegeneralfeedback'] = 'Masquer les commentaires généraux';
+$string['hidegeneralfeedback_help'] = 'Si cette case est cochée, le commentaire général de chaque question, c\'est-à-dire l\'explication affichée à tous les étudiants une fois la question terminée, est retiré du PDF.';
+$string['hiderightanswer'] = 'Masquer les réponses correctes';
+$string['hiderightanswer_help'] = 'Si cette case est cochée, la réponse correcte générée automatiquement pour chaque question est retirée du PDF, afin que les étudiants ne puissent pas consulter les solutions.';
+$string['hideresponsehistory'] = 'Masquer l\'historique des réponses';
+$string['hideresponsehistory_help'] = 'Si cette case est cochée, le tableau de l\'historique des réponses est retiré du PDF. Les étudiants ne peuvent donc pas voir quand un enseignant a modifié la note ou ajouté un commentaire.';
 
 // Settings.
 $string['timelimit'] = 'Limite de temps PHP pour la génération PDF';

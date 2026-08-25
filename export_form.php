@@ -39,15 +39,40 @@ defined('MOODLE_INTERNAL') || die();
 class quiz_export_settings_form extends attempts_report_options_form
 {
 
+    protected function definition()
+    {
+        parent::definition();
+
+        $this->_form->getElement('submitbutton')->setValue(get_string('applysettings', 'quiz_export'));
+    }
+
     protected function other_preference_fields(MoodleQuickForm $mform)
     {
         $mform->addElement('header', 'exportsettings',
             get_string('exportsettings', 'quiz_export'));
+
+        $mform->addElement('static', 'exportsettingsinfo', '',
+            get_string('exportsettingsinfo', 'quiz_export'));
 
         $mform->addElement('select', 'pagemode', get_string('pagemode', 'quiz_export'), array(
             quiz_export_engine::PAGEMODE_TRUEPAGE => get_string('exportmodetruepage', 'quiz_export'),
             quiz_export_engine::PAGEMODE_QUESTIONPERPAGE => get_string('exportmodequestionperpage', 'quiz_export'),
             quiz_export_engine::PAGEMODE_SINGLEPAGE => get_string('exportmodesinglepage', 'quiz_export'),
         ));
+
+        $mform->addElement('advcheckbox', 'hidegeneralfeedback',
+            get_string('hidegeneralfeedback', 'quiz_export'));
+        $mform->addHelpButton('hidegeneralfeedback', 'hidegeneralfeedback', 'quiz_export');
+        $mform->setDefault('hidegeneralfeedback', 0);
+
+        $mform->addElement('advcheckbox', 'hiderightanswer',
+            get_string('hiderightanswer', 'quiz_export'));
+        $mform->addHelpButton('hiderightanswer', 'hiderightanswer', 'quiz_export');
+        $mform->setDefault('hiderightanswer', 0);
+
+        $mform->addElement('advcheckbox', 'hideresponsehistory',
+            get_string('hideresponsehistory', 'quiz_export'));
+        $mform->addHelpButton('hideresponsehistory', 'hideresponsehistory', 'quiz_export');
+        $mform->setDefault('hideresponsehistory', 0);
     }
 }

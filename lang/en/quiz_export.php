@@ -35,10 +35,18 @@ $string['exportattempt'] = 'Export attempt';
 
 // export_form
 $string['exportsettings'] = 'Export Settings';
+$string['exportsettingsinfo'] = 'These settings apply to the exports started from this page, both the single attempt links and the bulk export. Apply them before you export.';
+$string['applysettings'] = 'Apply settings';
 $string['pagemode'] = 'Page mode (Page break mode while rendering quiz review before converting to PDF)';
 $string['exportmodetruepage'] = 'Actual question page assignment';
 $string['exportmodequestionperpage'] = 'One question per page';
 $string['exportmodesinglepage'] = 'All questions on one page';
+$string['hidegeneralfeedback'] = 'Hide general feedback';
+$string['hidegeneralfeedback_help'] = 'When ticked, the general feedback of each question, that is the explanation shown to every student once the question is finished, is left out of the PDF.';
+$string['hiderightanswer'] = 'Hide correct answers';
+$string['hiderightanswer_help'] = 'When ticked, the automatically generated correct answer of each question is left out of the PDF, so that students cannot read the solutions.';
+$string['hideresponsehistory'] = 'Hide response history';
+$string['hideresponsehistory_help'] = 'When ticked, the response history table is left out of the PDF. Students therefore cannot see when a teacher changed the grade or added a comment.';
 
 // Settings.
 $string['timelimit'] = 'PHP time limit for PDF generation';

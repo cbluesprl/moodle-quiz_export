@@ -25,6 +25,7 @@
 
 use mod_quiz\output\attempt_summary_information;
 use mod_quiz\quiz_attempt;
+use quiz_export\pdf_options;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -73,15 +74,24 @@ class quiz_export_engine
     ];
 
     /**
+     * @var \quiz_export\image_embedder|null
+     */
+    protected $imageembedder = null;
+
+    /**
      * Exports the given quiz attempt to a pdf file.
      * @param quiz_attempt $attemptobj The quiz attempt to export.
-     * @param int $pagemode The page break mode used to render the quiz review.
-     *                         One of PAGEMODE_TRUEPAGE, PAGEMODE_QUESTIONPERPAGE or PAGEMODE_SINGLEPAGE
+     * @param int|pdf_options $options The rendering options of the export.
      * @return string          File path and name as string of the pdf file.
      */
-    public function a2pdf($attemptobj, $pagemode)
+    public function a2pdf($attemptobj, $options)
     {
         global $CFG;
+        $exportoptions = pdf_options::create_from($options);
+        $pagemode = $exportoptions->pagemode;
+
+        $exportoptions->apply($attemptobj->get_display_options(true));
+
         $parameters_additionnal_informations = $this->get_additionnal_informations($attemptobj);
 
         $tmp_dir = $CFG->dataroot . '/mpdf';
@@ -143,8 +153,8 @@ class quiz_export_engine
                 $contentHTML = $this->add_question_percentages($contentHTML, $percentages);
                 $contentHTML = $this->prepareHtmlForPdf($contentHTML);
 
-                $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
-                $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
+                $pdf->WriteHTML($this->embed_images($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
+                $pdf->WriteHTML($this->embed_images($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
                 break;
         }
         if ($pagemode == quiz_export_engine::PAGEMODE_TRUEPAGE || $pagemode == quiz_export_engine::PAGEMODE_QUESTIONPERPAGE) {
@@ -167,9 +177,9 @@ class quiz_export_engine
                 $contentHTML = $this->prepareHtmlForPdf($contentHTML);
 
                 if ($current_page == 0) {
-                    $pdf->WriteHTML($this->preloadImageWithCurrentSession($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
+                    $pdf->WriteHTML($this->embed_images($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
                 }
-                $pdf->WriteHTML($this->preloadImageWithCurrentSession($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
+                $pdf->WriteHTML($this->embed_images($contentHTML), \Mpdf\HTMLParserMode::DEFAULT_MODE);
 
                 if (!$attemptobj->is_last_page($current_page)) {
                     $pdf->AddPage();
@@ -406,42 +416,23 @@ class quiz_export_engine
     }
 
     /**
-     * Encode all images in base64 to render it in the pdf
-     *
      * @param $html
-     * @return string|string[]
+     * @return string
      */
-    protected function preloadImageWithCurrentSession($html)
+    protected function embed_images($html)
     {
-        $matches = [];
-        $matches_content = [];
-        preg_match_all("/<img.*src=\"(https?:\/\/.*)\".*>/U", $html, $matches);
+        return $this->get_image_embedder()->embed($html);
+    }
 
-        if (count($matches[1]) > 0) {
-            $cookieFile = '/tmp/cookie-pdf';
-            file_put_contents($cookieFile, "MoodleSession=" . $_COOKIE['MoodleSession']);
-            // Without that we have to wait the script eneded to load images => time out
-            session_write_close();
-            foreach ($matches[1] as $match) {
-                $ch = curl_init($match);
-                $strCookie = session_name() . '=' . $_COOKIE[session_name()] . '; path=/';
-                curl_setopt($ch, CURLOPT_COOKIE, $strCookie);
-                curl_setopt($ch, CURLOPT_HEADER, 0);
-                curl_setopt($ch, CURLOPT_NOBODY, 0);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-                // Timeout in seconds
-                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-                $header = curl_getinfo($ch);
-                $result = curl_exec($ch);
-                $finfo = new finfo(FILEINFO_MIME_TYPE);
-                $mimeType = $finfo->buffer($result);
-                $matches_content[] = "data:" . $mimeType . ";base64," . base64_encode($result);
-                curl_close($ch);
-            }
-            $html = str_replace($matches[1], $matches_content, $html);
+    /**
+     * @return \quiz_export\image_embedder The embedder, shared so an image is encoded only once.
+     */
+    protected function get_image_embedder(): \quiz_export\image_embedder
+    {
+        if ($this->imageembedder === null) {
+            $this->imageembedder = new \quiz_export\image_embedder();
         }
-        return $html;
+        return $this->imageembedder;
     }
 
     /**

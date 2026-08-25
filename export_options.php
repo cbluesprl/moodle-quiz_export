@@ -46,10 +46,19 @@ class quiz_export_options extends attempts_report_options
     /** @var int Store the page mode for the quiz export report */
     public $pagemode = quiz_export_engine::PAGEMODE_QUESTIONPERPAGE;
 
+    public $hidegeneralfeedback = false;
+
+    public $hiderightanswer = false;
+
+    public $hideresponsehistory = false;
+
     protected function get_url_params()
     {
         $params = parent::get_url_params();
         $params['pagemode'] = $this->pagemode;
+        $params['hidegeneralfeedback'] = (int) $this->hidegeneralfeedback;
+        $params['hiderightanswer'] = (int) $this->hiderightanswer;
+        $params['hideresponsehistory'] = (int) $this->hideresponsehistory;
         return $params;
     }
 
@@ -57,6 +66,9 @@ class quiz_export_options extends attempts_report_options
     {
         $toform = parent::get_initial_form_data();
         $toform->pagemode = $this->pagemode;
+        $toform->hidegeneralfeedback = $this->hidegeneralfeedback;
+        $toform->hiderightanswer = $this->hiderightanswer;
+        $toform->hideresponsehistory = $this->hideresponsehistory;
         return $toform;
     }
 
@@ -64,12 +76,18 @@ class quiz_export_options extends attempts_report_options
     {
         parent::setup_from_form_data($fromform);
         $this->pagemode = $fromform->pagemode;
+        $this->hidegeneralfeedback = !empty($fromform->hidegeneralfeedback);
+        $this->hiderightanswer = !empty($fromform->hiderightanswer);
+        $this->hideresponsehistory = !empty($fromform->hideresponsehistory);
     }
 
     public function setup_from_params()
     {
         parent::setup_from_params();
         $this->pagemode = optional_param('pagemode', $this->pagemode, PARAM_INT);
+        $this->hidegeneralfeedback = (bool) optional_param('hidegeneralfeedback', $this->hidegeneralfeedback, PARAM_BOOL);
+        $this->hiderightanswer = (bool) optional_param('hiderightanswer', $this->hiderightanswer, PARAM_BOOL);
+        $this->hideresponsehistory = (bool) optional_param('hideresponsehistory', $this->hideresponsehistory, PARAM_BOOL);
     }
 
     public function resolve_dependencies()

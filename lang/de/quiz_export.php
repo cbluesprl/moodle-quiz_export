@@ -35,10 +35,18 @@ $string['exportattempt'] = 'Versuch exportieren';
 
 // export_form
 $string['exportsettings'] = 'Exporteinstellungen';
+$string['exportsettingsinfo'] = 'Diese Einstellungen gelten für die Exporte, die auf dieser Seite gestartet werden, sowohl für die Links zum Einzelexport als auch für den Sammelexport. Übernehmen Sie sie, bevor Sie exportieren.';
+$string['applysettings'] = 'Einstellungen übernehmen';
 $string['pagemode'] = 'Seitenwechsel (Modus beim Wechsel der Seiten während Erstellung der PDF-Datei)';
 $string['exportmodetruepage'] = 'Momentane Frage-Seiten-Zuordnung';
 $string['exportmodequestionperpage'] = 'Eine Frage pro Seite';
 $string['exportmodesinglepage'] = 'Alle Fragen auf einer Seite';
+$string['hidegeneralfeedback'] = 'Allgemeines Feedback ausblenden';
+$string['hidegeneralfeedback_help'] = 'Wenn aktiviert, wird das allgemeine Feedback jeder Frage, also die Erläuterung, die allen Teilnehmenden nach Abschluss der Frage angezeigt wird, nicht in die PDF-Datei übernommen.';
+$string['hiderightanswer'] = 'Musterlösungen ausblenden';
+$string['hiderightanswer_help'] = 'Wenn aktiviert, wird die automatisch erzeugte richtige Antwort jeder Frage nicht in die PDF-Datei übernommen, damit die Teilnehmenden die Lösungen nicht einsehen können.';
+$string['hideresponsehistory'] = 'Antworten-Rückblick ausblenden';
+$string['hideresponsehistory_help'] = 'Wenn aktiviert, wird die Tabelle mit dem Antworten-Rückblick nicht in die PDF-Datei übernommen. Die Teilnehmenden können dadurch nicht sehen, wann eine Lehrperson die Bewertung geändert oder einen Kommentar hinzugefügt hat.';
 
 // Settings.
 $string['timelimit'] = 'PHP-Zeitlimit für die PDF-Erzeugung';

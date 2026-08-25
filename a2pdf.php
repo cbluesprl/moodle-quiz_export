@@ -34,8 +34,8 @@ require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 $attemptid = required_param('attempt', PARAM_INT);
-$pagemode = optional_param('pagemode', quiz_export_engine::PAGEMODE_TRUEPAGE, PARAM_INT);
 $inline = optional_param('inline', 0, PARAM_INT);
+$exportoptions = \quiz_export\pdf_options::from_params();
 
 // Get attempt object
 $attemptobj = quiz_attempt::create($attemptid);
@@ -54,13 +54,12 @@ $asyncsingle = get_config('quiz_export', 'asyncsingle');
 if (!empty($asyncsingle)) {
     // Queue an adhoc task for async export.
     $task = new \quiz_export\task\export_single_attempt();
-    $task->set_custom_data([
+    $task->set_custom_data(array_merge($exportoptions->to_array(), [
         'attemptid' => $attemptid,
-        'pagemode' => $pagemode,
         'inline' => $inline,
         'userid' => $USER->id,
         'cmid' => $attemptobj->get_cmid(),
-    ]);
+    ]));
     $task->set_userid($USER->id);
     \core\task\manager::queue_adhoc_task($task);
 
@@ -73,7 +72,7 @@ if (!empty($asyncsingle)) {
     set_time_limit($timelimit !== false ? (int) $timelimit : 600);
 
     $exporter = new quiz_export_engine();
-    $pdf_file = $exporter->a2pdf($attemptobj, $pagemode);
+    $pdf_file = $exporter->a2pdf($attemptobj, $exportoptions);
 
     $info = $exporter->get_additionnal_informations($attemptobj);
     $filename = $info['firstname'] . '_' . $info['lastname'] . '.pdf';

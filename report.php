@@ -66,6 +66,7 @@ class quiz_export_report extends attempts_report
         // ... takes the information from the form object
         if ($fromform = $this->form->get_data()) {
             $this->options->process_settings_from_form($fromform);
+            redirect($this->options->get_url());
         } else {
             $this->options->process_settings_from_params();
         }
@@ -335,12 +336,14 @@ class quiz_export_report extends attempts_report
                     if (!empty($asyncbulk)) {
                         // Queue an adhoc task for async bulk export.
                         $task = new \quiz_export\task\export_attempts();
-                        $task->set_custom_data([
-                            'attemptids' => $attemptids,
-                            'pagemode' => $this->options->pagemode,
-                            'userid' => $USER->id,
-                            'cmid' => $cm->id,
-                        ]);
+                        $task->set_custom_data(array_merge(
+                            \quiz_export\pdf_options::from_data($this->options)->to_array(),
+                            [
+                                'attemptids' => $attemptids,
+                                'userid' => $USER->id,
+                                'cmid' => $cm->id,
+                            ]
+                        ));
                         $task->set_userid($USER->id);
                         \core\task\manager::queue_adhoc_task($task);
 
@@ -374,6 +377,7 @@ class quiz_export_report extends attempts_report
 
         $pdf_files = array();
         $exporter = new quiz_export_engine();
+        $exportoptions = \quiz_export\pdf_options::from_data($this->options);
 
         $tmp_dir = sys_get_temp_dir();
         $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
@@ -387,7 +391,7 @@ class quiz_export_report extends attempts_report
         foreach ($attemptids as $attemptid) {
             $attemptobj = quiz_attempt::create($attemptid);
             $attemptobj->preload_all_attempt_step_users();
-            $pdf_file = $exporter->a2pdf($attemptobj, $this->options->pagemode);
+            $pdf_file = $exporter->a2pdf($attemptobj, $exportoptions);
             $pdf_files[] = $pdf_file;
             $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
             $zip->addFile($pdf_file, fullname($student, true) . "_" . $attemptid . '.pdf');
