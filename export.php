@@ -56,6 +56,23 @@ class quiz_export_engine
     const PAGEMODE_SINGLEPAGE = 2;
 
     /**
+     * Background colours of the Bootstrap contextual variants, used to inline badge styles in the pdf.
+     *
+     * Keyed by variant name, the same names are used by Bootstrap 4 (badge-primary) and
+     * Bootstrap 5 (bg-primary, text-bg-primary), so a single map covers Moodle 4.4 to 5.2.
+     */
+    const BADGE_COLOURS = [
+        'primary' => ['#1177d1', '#fff'],
+        'secondary' => ['#6c757d', '#fff'],
+        'success' => ['#357a32', '#fff'],
+        'danger' => ['#ca3120', '#fff'],
+        'warning' => ['#f0ad4e', '#1f1300'],
+        'info' => ['#008196', '#fff'],
+        'light' => ['#f8f9fa', '#1d2125'],
+        'dark' => ['#343a40', '#fff'],
+    ];
+
+    /**
      * Exports the given quiz attempt to a pdf file.
      * @param quiz_attempt $attemptobj The quiz attempt to export.
      * @param int $pagemode The page break mode used to render the quiz review.
@@ -477,15 +494,34 @@ class quiz_export_engine
             . '<path d="M8 8 L16 16 M16 8 L8 16" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>'
             . '</svg>';
 
-        // Step 0a: Remove visually-hidden elements (Bootstrap 5 screen-reader-only class).
-        // mPDF does not reliably support the CSS used by .visually-hidden, so strip them from HTML.
-        $html = preg_replace('/<[^>]+class="[^"]*\bvisually-hidden\b[^"]*"[^>]*>.*?<\/\w+>/is', '', $html);
+        // Step 0a: Remove screen-reader-only elements, named visually-hidden in Bootstrap 5
+        // (Moodle 5.x) and sr-only in Bootstrap 4 (Moodle 4.4).
+        // mPDF does not reliably support the CSS used by those classes, so strip them from HTML.
+        $html = preg_replace(
+            '/<[^>]+class="[^"]*\b(?:visually-hidden|sr-only)\b[^"]*"[^>]*>.*?<\/\w+>/is',
+            '',
+            $html
+        );
 
         // Step 0b: Convert Bootstrap badge classes to inline styles for mPDF compatibility.
         // mPDF does not reliably apply background-color + color via CSS classes on inline elements.
-        $html = preg_replace(
-            '/<span([^>]*class="[^"]*\bbadge\b[^"]*\bbg-primary\b[^"]*"[^>]*)>/is',
-            '<span$1 style="background-color:#1177d1;color:#fff;padding:2px 6px;border-radius:3px;">',
+        // The variant class is badge-x in Bootstrap 4 and bg-x or text-bg-x in Bootstrap 5.
+        $html = preg_replace_callback(
+            '/<span([^>]*class="([^"]*\bbadge\b[^"]*)"[^>]*)>/is',
+            function ($matches) {
+                $variant = 'primary';
+                preg_match_all('/\b(?:badge|bg|text-bg)-(\w+)\b/i', $matches[2], $found);
+                foreach ($found[1] as $candidate) {
+                    if (isset(self::BADGE_COLOURS[strtolower($candidate)])) {
+                        $variant = strtolower($candidate);
+                        break;
+                    }
+                }
+                list($background, $colour) = self::BADGE_COLOURS[$variant];
+
+                return '<span' . $matches[1] . ' style="background-color:' . $background . ';color:' . $colour
+                    . ';padding:2px 6px;border-radius:3px;">';
+            },
             $html
         );
 
@@ -517,9 +553,9 @@ class quiz_export_engine
             $html
         );
 
-        // Step 4: Remove .ms-1 span wrapper, keep content.
+        // Step 4: Remove the answer text span wrapper, keep content.
         $html = preg_replace(
-            '/<span[^>]*class="[^"]*\bms-1\b[^"]*"[^>]*>(.*?)<\/span>/is',
+            '/<span[^>]*class="[^"]*\b(?:ms-1|ml-1)\b[^"]*"[^>]*>(.*?)<\/span>/is',
             ' $1',
             $html
         );

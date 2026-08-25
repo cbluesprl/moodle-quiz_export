@@ -25,6 +25,7 @@ global $CFG;
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
+require_once($CFG->dirroot . '/mod/quiz/report/export/classes/task/export_task_base.php');
 
 /**
  * Adhoc task to export a single quiz attempt as PDF asynchronously.
@@ -33,7 +34,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  * @copyright 2020 CBlue Srl
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class export_single_attempt extends \core\task\adhoc_task {
+class export_single_attempt extends export_task_base {
 
     /**
      * Return the name of this task.
@@ -45,7 +46,7 @@ class export_single_attempt extends \core\task\adhoc_task {
     }
 
     /**
-     * Execute the task: generate a PDF and store it via File API.
+     * Generate the PDF and store it via the File API.
      *
      * Expected custom data:
      * - attemptid (int): The quiz attempt ID.
@@ -54,12 +55,8 @@ class export_single_attempt extends \core\task\adhoc_task {
      * - userid (int): The user who requested the export.
      * - cmid (int): The course module ID for the quiz.
      */
-    public function execute(): void {
+    protected function execute_export(): void {
         global $CFG;
-
-        raise_memory_limit(MEMORY_HUGE);
-        $timelimit = get_config('quiz_export', 'timelimit');
-        set_time_limit($timelimit !== false ? (int) $timelimit : 600);
 
         $data = $this->get_custom_data();
         $attemptid = $data->attemptid;

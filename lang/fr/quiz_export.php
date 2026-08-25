@@ -42,7 +42,7 @@ $string['exportmodesinglepage'] = 'Toutes les questions à la suite';
 
 // Settings.
 $string['timelimit'] = 'Limite de temps PHP pour la génération PDF';
-$string['timelimitdesc'] = 'Temps d\'exécution maximum en secondes autorisé pour la génération des PDF. Augmentez cette valeur si les exports PDF échouent sur les quiz volumineux. Mettre à 0 pour illimité (non recommandé). Par défaut : 600 secondes (10 minutes).';
+$string['timelimitdesc'] = 'Temps d\'exécution maximum en secondes autorisé pour la génération des PDF. Ce réglage ne s\'applique qu\'aux exports synchrones, exécutés dans la requête web : les exports asynchrones tournent sous cron et ne sont pas limités par ce réglage. Augmentez cette valeur si les exports PDF synchrones échouent sur les quiz volumineux. Mettre à 0 pour illimité (non recommandé). Par défaut : 600 secondes (10 minutes).';
 
 // Async export settings.
 $string['asyncsingle'] = 'Activer l\'export individuel asynchrone';
@@ -73,8 +73,29 @@ $string['exportdownload'] = 'Télécharger';
 $string['exportstatus'] = 'Statut';
 $string['exportstatuspending'] = 'En attente';
 $string['exportstatusinprogress'] = 'En cours';
+$string['exportstatusretrying'] = 'Échec - nouvelle tentative prévue';
+$string['exportstatusfailed'] = 'Échec';
+$string['exportstatusstalled'] = 'Interrompu';
 $string['exportstatuscomplete'] = 'Terminé';
 $string['exportpending'] = 'Export en préparation…';
+$string['exportnofile'] = 'Aucun fichier généré';
+
+// Export status details.
+$string['exportdetailpending'] = 'Mis en file il y a {$a}, en attente de la prochaine exécution des tâches planifiées.';
+$string['exportdetailpendinglate'] = 'Mis en file il y a {$a} et toujours pas pris en charge. Les tâches planifiées ne s\'exécutent peut-être pas sur cette plateforme.';
+$string['exportdetailinprogress'] = 'Démarré il y a {$a}.';
+$string['exportdetailretrying'] = 'L\'export a échoué. Prochaine tentative : {$a->nextrun} ({$a->attempts} tentative(s) restante(s)).';
+$string['exportdetailretryingnocount'] = 'L\'export a échoué. Prochaine tentative : {$a}.';
+$string['exportdetailfailed'] = 'L\'export a échoué et ne sera pas relancé.';
+$string['exportdetailstalled'] = 'Démarré il y a {$a} et toujours pas terminé. Le traitement a très probablement été interrompu.';
+$string['exportfailhint'] = 'Cela se produit généralement lorsque le quiz comporte un grand nombre de tentatives et que l\'export dépasse le temps d\'exécution maximal. Essayez d\'exporter moins de tentatives à la fois, ou demandez à votre administrateur d\'augmenter la limite de temps de l\'export.';
+$string['exporterrordetails'] = 'Détails techniques';
+
+// Failure notification.
+$string['exportfailed'] = 'Votre export de quiz n\'a pas pu être finalisé.';
+$string['exportfailedsubject'] = 'Échec de l\'export de quiz';
+$string['exportfailedinterrupted'] = 'L\'export a été interrompu avant d\'avoir pu se terminer (temps d\'exécution ou mémoire dépassés).';
+$string['messageprovider:exportfailed'] = 'Notification d\'échec d\'export de quiz';
 
 // Retention settings.
 $string['retentiondays'] = 'Rétention des exports (jours)';

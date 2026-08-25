@@ -55,4 +55,37 @@ class notification_helper {
 
         return message_send($message);
     }
+
+    /**
+     * @param int $userid The user ID to notify.
+     * @param string $reason Technical reason of the failure, shown as a support detail.
+     * @param string $reporturl The URL of the export report.
+     * @return int|false The message ID on success, false on failure.
+     */
+    public static function send_export_failed(int $userid, string $reason, string $reporturl) {
+        global $DB;
+
+        $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
+
+        $intro = get_string('exportfailed', 'quiz_export');
+        $hint = get_string('exportfailhint', 'quiz_export');
+
+        $message = new \core\message\message();
+        $message->component = 'quiz_export';
+        $message->name = 'exportfailed';
+        $message->notification = 1;
+        $message->userfrom = \core_user::get_noreply_user();
+        $message->userto = $user;
+        $message->subject = get_string('exportfailedsubject', 'quiz_export');
+        $message->fullmessage = $intro . "\n\n" . $hint . "\n\n" . $reason . "\n" . $reporturl;
+        $message->fullmessageformat = FORMAT_PLAIN;
+        $message->fullmessagehtml = \html_writer::tag('p', $intro)
+            . \html_writer::tag('p', $hint)
+            . \html_writer::tag('p', s($reason), ['style' => 'color: #6c757d; font-size: 0.875em;']);
+        $message->smallmessage = $intro;
+        $message->contexturl = $reporturl;
+        $message->contexturlname = get_string('previousexports', 'quiz_export');
+
+        return message_send($message);
+    }
 }

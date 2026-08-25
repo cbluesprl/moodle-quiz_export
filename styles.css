@@ -1,0 +1,77 @@
+/**
+ * Plugin styles for the quiz export report.
+ *
+ * This plugin supports Moodle 4.4 (Bootstrap 4) up to Moodle 5.2 (Bootstrap 5).
+ * Several Bootstrap classes were renamed or removed between the two versions
+ * (badge-x, text-muted, sr-only, directional margins, ...), so the report UI does
+ * not rely on them any more. Every visual element uses a plugin-owned class defined
+ * here, so the rendering stays identical whatever the Bootstrap version in use.
+ *
+ * Never write a star followed by a slash inside these comments: it closes the comment
+ * early and the CSS parser then swallows the whole rule that follows.
+ *
+ * @package   quiz_export
+ * @copyright 2020 CBlue Srl
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+.quizexport-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    border: 2px solid;
+    border-radius: 999px;
+}
+
+.quizexport-badge-pending {
+    color: #fff;
+    background-color: #6c757d;
+    border-color: #4d5459;
+}
+
+.quizexport-badge-progress {
+    color: #3d2600;
+    background-color: #f5b13d;
+    border-color: #c47f00;
+}
+
+.quizexport-badge-error {
+    color: #fff;
+    background-color: #ca3120;
+    border-color: #8f2317;
+}
+
+.quizexport-badge-done {
+    color: #fff;
+    background-color: #357a32;
+    border-color: #24551f;
+}
+
+/* Secondary line under a badge, replaces .small.text-muted.mt-1. */
+.quizexport-note {
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #6c757d;
+}
+
+/* Collapsible technical error block, replaces .small.mt-1. */
+.quizexport-details {
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+}
+
+.quizexport-details summary {
+    cursor: pointer;
+}
+
+.quizexport-details pre {
+    margin-top: 0.25rem;
+    margin-bottom: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

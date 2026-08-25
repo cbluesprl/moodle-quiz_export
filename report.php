@@ -34,6 +34,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export_table.php');
 require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
+require_once($CFG->dirroot . '/mod/quiz/report/export/classes/export_status.php');
 
 /**
  * Quiz report subclass for the export report.
@@ -45,6 +46,9 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
  */
 class quiz_export_report extends attempts_report
 {
+
+    /** @var int Maximum number of characters of task output shown in the error details block. */
+    const ERROR_OUTPUT_MAXLENGTH = 2000;
 
     /** @var object Store options for the quiz export report (page mode, etc.) */
     private $options;
@@ -194,23 +198,36 @@ class quiz_export_report extends attempts_report
         ];
         $historytable->attributes['class'] = 'generaltable';
 
-        // Pending/running tasks first.
+        // Pending/running/failed tasks first.
+        $showtechnicaldetails = has_capability('moodle/site:config', \context_system::instance());
+
         foreach ($pendingtasks as $task) {
-            if (!empty($task->timestarted)) {
-                $statuslabel = get_string('exportstatusinprogress', 'quiz_export');
-                $statusclass = 'badge badge-warning text-dark';
-            } else {
-                $statuslabel = get_string('exportstatuspending', 'quiz_export');
-                $statusclass = 'badge badge-secondary';
+            $status = \quiz_export\export_status::from_task_record($task);
+
+            $statuscell = \html_writer::tag('span', $status->get_label(),
+                ['class' => $status->get_badge_class()]);
+            $statuscell .= \html_writer::div($status->get_detail(), 'quizexport-note');
+
+            $hint = $status->get_hint();
+            if ($hint !== '') {
+                $statuscell .= \html_writer::div($hint, 'quizexport-note');
             }
-            $row = [
+
+            if ($showtechnicaldetails && $status->is_failure()) {
+                $statuscell .= $this->render_task_error_details($task);
+            }
+
+            $filenamecell = $status->is_failure()
+                ? get_string('exportnofile', 'quiz_export')
+                : \html_writer::tag('em', get_string('exportpending', 'quiz_export'));
+
+            $historytable->data[] = [
                 userdate($task->timecreated),
-                \html_writer::tag('em', get_string('exportpending', 'quiz_export')),
+                $filenamecell,
                 '-',
-                \html_writer::tag('span', $statuslabel, ['class' => $statusclass]),
+                $statuscell,
                 '',
             ];
-            $historytable->data[] = $row;
         }
 
         // Completed export files.
@@ -221,7 +238,7 @@ class quiz_export_report extends attempts_report
                 userdate($file->timecreated),
                 s($file->filename),
                 display_size($file->filesize),
-                \html_writer::tag('span', $statuslabel, ['class' => 'badge badge-success']),
+                \html_writer::tag('span', $statuslabel, ['class' => 'quizexport-badge quizexport-badge-done']),
                 \html_writer::link($downloadurl, get_string('downloadexport', 'quiz_export')),
             ];
             $historytable->data[] = $row;
@@ -246,7 +263,7 @@ class quiz_export_report extends attempts_report
 
         list($insql, $inparams) = $DB->get_in_or_equal($classnames, SQL_PARAMS_NAMED);
 
-        $sql = "SELECT id, classname, timecreated, timestarted
+        $sql = "SELECT *
                   FROM {task_adhoc}
                  WHERE classname {$insql}
                    AND userid = :userid
@@ -255,6 +272,46 @@ class quiz_export_report extends attempts_report
         $inparams['userid'] = $userid;
 
         return $DB->get_records_sql($sql, $inparams);
+    }
+
+    /**
+     * @param \stdClass $task The task_adhoc record.
+     * @return string HTML of a collapsed details block, empty when no failed log is available.
+     */
+    protected function render_task_error_details(\stdClass $task): string {
+        global $DB, $USER;
+
+        $since = max((int) $task->timecreated, (int) ($task->firststartingtime ?? 0));
+
+        $sql = "SELECT id, output, timestart
+                  FROM {task_log}
+                 WHERE classname = :classname
+                   AND userid = :userid
+                   AND result = 1
+                   AND timestart >= :since
+              ORDER BY timestart DESC";
+
+        $params = [
+            'classname' => ltrim($task->classname, '\\'),
+            'userid' => $USER->id,
+            'since' => $since,
+        ];
+
+        $logs = $DB->get_records_sql($sql, $params, 0, 1);
+        if (empty($logs)) {
+            return '';
+        }
+
+        $log = reset($logs);
+        $output = trim($log->output);
+        if (\core_text::strlen($output) > self::ERROR_OUTPUT_MAXLENGTH) {
+            $output = '…' . \core_text::substr($output, -self::ERROR_OUTPUT_MAXLENGTH);
+        }
+
+        return \html_writer::tag('details',
+            \html_writer::tag('summary', get_string('exporterrordetails', 'quiz_export'))
+            . \html_writer::tag('pre', s($output)),
+            ['class' => 'quizexport-details']);
     }
 
     /**
