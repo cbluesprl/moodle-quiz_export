@@ -32,6 +32,9 @@ $string['exportattemptcheck'] = 'Exporter les tentatives sélectionnées ?';
 
 $string['exportattempt'] = 'Exporter cette tentative en pdf';
 
+// Privacy.
+$string['privacy:metadata'] = 'Le plugin QuizExport ne stocke aucune donnée personnelle.';
+
 // export_form
 $string['exportsettings'] = 'Paramètres d\'export';
 $string['pagemode'] = 'Mode de pagination (La manière dont vont être gérés les sauts de page lors de l\'export PDF)';
