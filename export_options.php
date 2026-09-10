@@ -90,6 +90,32 @@ class quiz_export_options extends attempts_report_options
         $this->hideresponsehistory = (bool) optional_param('hideresponsehistory', $this->hideresponsehistory, PARAM_BOOL);
     }
 
+    /**
+     * Set the fields of this object from the user's preferences.
+     */
+    public function setup_from_user_preferences()
+    {
+        parent::setup_from_user_preferences();
+        $this->pagemode = (int) get_user_preferences('quiz_export_pagemode', $this->pagemode);
+        $this->hidegeneralfeedback = (bool) get_user_preferences('quiz_export_hidegeneralfeedback',
+            $this->hidegeneralfeedback);
+        $this->hiderightanswer = (bool) get_user_preferences('quiz_export_hiderightanswer', $this->hiderightanswer);
+        $this->hideresponsehistory = (bool) get_user_preferences('quiz_export_hideresponsehistory',
+            $this->hideresponsehistory);
+    }
+
+    /**
+     * Update the user preferences so they match the settings in this object.
+     */
+    public function update_user_preferences()
+    {
+        parent::update_user_preferences();
+        set_user_preference('quiz_export_pagemode', $this->pagemode);
+        set_user_preference('quiz_export_hidegeneralfeedback', (int) $this->hidegeneralfeedback);
+        set_user_preference('quiz_export_hiderightanswer', (int) $this->hiderightanswer);
+        set_user_preference('quiz_export_hideresponsehistory', (int) $this->hideresponsehistory);
+    }
+
     public function resolve_dependencies()
     {
         $this->checkboxcolumn = true;

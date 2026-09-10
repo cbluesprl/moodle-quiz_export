@@ -54,7 +54,7 @@ class quiz_export_report extends attempts_report
 
     public function display($quiz, $cm, $course)
     {
-        global $OUTPUT, $DB, $USER;
+        global $OUTPUT, $DB, $USER, $PAGE;
 
         // This inits the quiz_attempts_report (parent class) functionality
         list($currentgroup, $students, $groupstudents, $allowed) =
@@ -109,6 +109,10 @@ class quiz_export_report extends attempts_report
             echo $OUTPUT->notification(get_string('nostudentsyet'));
         } else if ($currentgroup && !$groupstudents) {
             echo $OUTPUT->notification(get_string('nostudentsingroup'));
+        }
+
+        if (!$table->is_downloading()) {
+            $PAGE->requires->js_call_amd('quiz_export/export_settings', 'init');
         }
 
         $this->form->display();
