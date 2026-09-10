@@ -112,5 +112,22 @@ $string['retentiondaysdesc'] = 'Anzahl der Tage, die Exportdateien vor der autom
 // Scheduled task.
 $string['taskcleanupexports'] = 'Abgelaufene Testexport-Dateien bereinigen';
 
+// Settings.
+
+// Async export settings.
+
+// Async export notifications.
+
+// Adhoc task names.
+
+// Message provider.
+
+// Export history.
+
+// Retention settings.
+
+// Scheduled task.
+
 // Inside the pdf
-$string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Versuch von {$a->firstname} {$a->lastname}\'s attempt';
+$string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Zusammenfassung des Versuchs von {$a->firstname} {$a->lastname}';
+$string['unplacedlabels'] = 'Nicht platzierte Etiketten:';

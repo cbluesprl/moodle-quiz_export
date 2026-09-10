@@ -16,16 +16,11 @@
 
 namespace quiz_export\task;
 
-use mod_quiz\quiz_attempt;
+use quiz_export\export_service;
 use quiz_export\notification_helper;
+use quiz_export\pdf_options;
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
-require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
-require_once($CFG->dirroot . '/mod/quiz/report/export/classes/task/export_task_base.php');
 
 /**
  * Adhoc task to export a single quiz attempt as PDF asynchronously.
@@ -59,48 +54,25 @@ class export_single_attempt extends export_task_base {
      * - cmid (int): The course module ID for the quiz.
      */
     protected function execute_export(): void {
-        global $CFG;
-
         $data = $this->get_custom_data();
-        $attemptid = $data->attemptid;
-        $exportoptions = \quiz_export\pdf_options::from_data($data);
-        $userid = $data->userid;
-        $cmid = $data->cmid;
 
-        $attemptobj = quiz_attempt::create($attemptid);
-        $attemptobj->preload_all_attempt_step_users();
+        $service = new export_service();
+        $storedfile = $service->export_single(
+            (int) $data->attemptid,
+            pdf_options::from_data($data),
+            (int) $data->userid,
+            (int) $data->cmid
+        );
 
-        $exporter = new \quiz_export_engine();
-        $pdffile = $exporter->a2pdf($attemptobj, $exportoptions);
-
-        $info = $exporter->get_additionnal_informations($attemptobj);
-        $filename = $info['firstname'] . '_' . $info['lastname'] . '.pdf';
-
-        // Store the file via File API.
-        $context = \context_module::instance($cmid);
-        $fs = get_file_storage();
-
-        $filerecord = [
-            'contextid' => $context->id,
-            'component' => 'quiz_export',
-            'filearea' => 'export',
-            'itemid' => time(),
-            'filepath' => '/',
-            'filename' => $filename,
-            'userid' => $userid,
-        ];
-
-        $storedfile = $fs->create_file_from_pathname($filerecord, $pdffile);
-
-        // Cleanup temporary file.
-        unlink($pdffile);
-
-        // Build report URL and send notification.
         $reporturl = new \moodle_url('/mod/quiz/report.php', [
-            'id' => $cmid,
+            'id' => $data->cmid,
             'mode' => 'export',
         ]);
 
-        notification_helper::send_export_complete($userid, $filename, $reporturl->out(false));
+        notification_helper::send_export_complete(
+            (int) $data->userid,
+            $storedfile->get_filename(),
+            $reporturl->out(false)
+        );
     }
 }

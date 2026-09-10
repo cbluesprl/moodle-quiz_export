@@ -117,3 +117,4 @@ $string['taskcleanupexports'] = 'Clean up expired quiz export files';
 
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Summary of {$a->firstname} {$a->lastname}\'s attempt';
+$string['unplacedlabels'] = 'Unplaced labels:';

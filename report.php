@@ -25,7 +25,6 @@
 
 
 use mod_quiz\local\reports\attempts_report;
-use mod_quiz\quiz_attempt;
 
 defined('MOODLE_INTERNAL') || die();
 global $CFG;
@@ -351,9 +350,6 @@ class quiz_export_report extends attempts_report
                             \core\output\notification::NOTIFY_SUCCESS);
                     } else {
                         // Synchronous export (original behaviour).
-                        raise_memory_limit(MEMORY_HUGE);
-                        $timelimit = get_config('quiz_export', 'timelimit');
-                        set_time_limit($timelimit !== false ? (int) $timelimit : 600);
                         $this->export_attempts($quiz, $cm, $attemptids, $allowed);
                         redirect($redirecturl);
                     }
@@ -373,55 +369,19 @@ class quiz_export_report extends attempts_report
      */
     protected function export_attempts($quiz, $cm, $attemptids, $allowed)
     {
-        global $DB, $USER;
+        global $USER;
 
-        $pdf_files = array();
-        $exporter = new quiz_export_engine();
-        $exportoptions = \quiz_export\pdf_options::from_data($this->options);
+        $service = new \quiz_export\export_service();
+        $storedfile = $service->export_bulk(
+            $attemptids,
+            \quiz_export\pdf_options::from_data($this->options),
+            $USER->id,
+            $cm->id
+        );
 
-        $tmp_dir = sys_get_temp_dir();
-        $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
-        $tmp_zip_file = $tmp_file . ".zip";
-        rename($tmp_file, $tmp_zip_file);
-        chmod($tmp_zip_file, 0644);
-
-        $zip = new ZipArchive;
-        $zip->open($tmp_zip_file, ZipArchive::OVERWRITE);
-
-        foreach ($attemptids as $attemptid) {
-            $attemptobj = quiz_attempt::create($attemptid);
-            $attemptobj->preload_all_attempt_step_users();
-            $pdf_file = $exporter->a2pdf($attemptobj, $exportoptions);
-            $pdf_files[] = $pdf_file;
-            $student = $DB->get_record('user', array('id' => $attemptobj->get_userid()));
-            $zip->addFile($pdf_file, fullname($student, true) . "_" . $attemptid . '.pdf');
-        }
-        $zip->close();
-
-        // Store the ZIP file via File API so it appears in export history.
-        $filename = 'quiz_export_' . date('Ymd_His') . '.zip';
-        $context = \context_module::instance($cm->id);
-        $fs = get_file_storage();
-        $filerecord = [
-            'contextid' => $context->id,
-            'component' => 'quiz_export',
-            'filearea' => 'export',
-            'itemid' => time(),
-            'filepath' => '/',
-            'filename' => $filename,
-            'userid' => $USER->id,
-        ];
-        $fs->create_file_from_pathname($filerecord, $tmp_zip_file);
-
-        header("Content-Type: application/zip");
-        header("Content-Disposition: attachment; filename=\"" . $filename . "\"");
-        readfile($tmp_zip_file);
-
-        // Cleanup
-        foreach ($pdf_files as $pdf_file) {
-            unlink($pdf_file);
-        }
-        unset($zip);
-        unlink($tmp_zip_file);
+        $filename = $storedfile->get_filename();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        $storedfile->readfile();
     }
 }

@@ -117,3 +117,4 @@ $string['taskcleanupexports'] = 'Nettoyage des fichiers d\'export de quiz expir�
 
 // Inside the pdf
 $string['documenttitle'] = '{$a->coursename} <br> {$a->quizname} <br> - <br> Réponses de {$a->firstname} {$a->lastname}';
+$string['unplacedlabels'] = 'Étiquettes non placées :';

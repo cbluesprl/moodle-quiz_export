@@ -26,6 +26,7 @@
 use mod_quiz\output\attempt_summary_information;
 use mod_quiz\quiz_attempt;
 use quiz_export\pdf_options;
+use quiz_export\helper\qtype_renderer_factory;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -104,12 +105,6 @@ class quiz_export_engine
         $tmp_pdf_file = $tmp_file . ".pdf";
         rename($tmp_file, $tmp_pdf_file);
         chmod($tmp_pdf_file, 0644);
-        ob_start();
-        $tmp_file = tempnam($tmp_dir, "mdl-qexp_");
-        ob_get_clean();
-        $tmp_err_file = $tmp_file . ".txt";
-        rename($tmp_file, $tmp_err_file);
-        chmod($tmp_err_file, 0644);
 
         $pdf = new \Mpdf\Mpdf([
             'tempDir' => $tmp_dir,
@@ -148,9 +143,11 @@ class quiz_export_engine
                 ob_start();
                 include $html_files[0];
                 $contentHTML = ob_get_clean();
+                $contentHTML = $this->preprocessDragDropQuestions($contentHTML, $attemptobj);
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
                 $contentHTML = $this->add_question_percentages($contentHTML, $percentages);
+                $contentHTML = $this->inlineBadgeStyles($contentHTML);
                 $contentHTML = $this->prepareHtmlForPdf($contentHTML);
 
                 $pdf->WriteHTML($this->embed_images($additionnal_informations), \Mpdf\HTMLParserMode::HTML_BODY);
@@ -171,9 +168,11 @@ class quiz_export_engine
                 ob_start();
                 include $html_file;
                 $contentHTML = ob_get_clean();
+                $contentHTML = $this->preprocessDragDropQuestions($contentHTML, $attemptobj);
                 $contentHTML = preg_replace("/<input type=\"text\".+?value=\"/", ' - ', $contentHTML);
                 $contentHTML = preg_replace("/\" id=\"q.+?readonly\"(>| \/>)/", ' - ', $contentHTML);
                 $contentHTML = $this->add_question_percentages($contentHTML, $percentages);
+                $contentHTML = $this->inlineBadgeStyles($contentHTML);
                 $contentHTML = $this->prepareHtmlForPdf($contentHTML);
 
                 if ($current_page == 0) {
@@ -190,12 +189,103 @@ class quiz_export_engine
         $pdf->Output($tmp_pdf_file, \Mpdf\Output\Destination::FILE);
 
         // Cleanup
-        unlink($tmp_err_file);
         foreach ($html_files as $file) {
             unlink($file);
         }
 
         return $tmp_pdf_file;
+    }
+
+    /**
+     * Replace interactive drag-and-drop question blocks by static HTML
+     * compatible with mPDF.
+     *
+     * Iterates over the slots of the attempt, looks up the matching question
+     * block in the rendered HTML and delegates the transformation to the
+     * factory. Any unsupported question is left untouched.
+     *
+     * @param string $html Rendered review HTML.
+     * @param quiz_attempt $attemptobj The current attempt.
+     * @return string HTML with drag-and-drop blocks replaced.
+     */
+    protected function preprocessDragDropQuestions(string $html, quiz_attempt $attemptobj): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+        try {
+            $displayoptions = $attemptobj->get_display_options(true);
+            return qtype_renderer_factory::transform($html, $attemptobj, $displayoptions);
+        } catch (\Throwable $exception) {
+            debugging('quiz_export DD preprocessing failed: ' . $exception->getMessage(), DEBUG_DEVELOPER);
+            return $html;
+        }
+    }
+
+    /**
+     * Convert Bootstrap badge utility classes used by core Moodle (notably
+     * the question version badge) into inline styles. mPDF's CSS engine
+     * doesn't reliably resolve combined utility classes, which results in
+     * unreadable black-on-black badges in the PDF output.
+     *
+     * @param string $html Source HTML.
+     * @return string HTML with badges restyled.
+     */
+    protected function inlineBadgeStyles(string $html): string
+    {
+        $pattern = '#<span\b([^>]*)\bclass="([^"]*\bbadge\b[^"]*)"([^>]*)>(.*?)</span>#is';
+        $result = preg_replace_callback($pattern, function ($match) {
+            $classes = $match[2];
+            $background = $this->resolve_bootstrap_bg_color($classes);
+            $color = $this->resolve_bootstrap_text_color($classes);
+            $style = 'display:inline-block; padding:2px 6px; border-radius:3px; '
+                . 'font-size:11px; font-weight:bold; line-height:1; '
+                . 'background-color:' . $background . '; color:' . $color . ';';
+            return '<span style="' . $style . '">' . $match[4] . '</span>';
+        }, $html);
+        return $result !== null ? $result : $html;
+    }
+
+    /**
+     * Pick a sensible background colour from the Bootstrap utility classes
+     * applied to a badge.
+     */
+    private function resolve_bootstrap_bg_color(string $classes): string
+    {
+        $map = [
+            'bg-primary' => '#1177d1',
+            'bg-secondary' => '#6c757d',
+            'bg-success' => '#398439',
+            'bg-danger' => '#d43f3a',
+            'bg-warning' => '#f0ad4e',
+            'bg-info' => '#5bc0de',
+            'bg-dark' => '#343a40',
+            'bg-light' => '#f8f9fa',
+        ];
+        foreach ($map as $class => $color) {
+            if (preg_match('#\b' . preg_quote($class, '#') . '\b#', $classes)) {
+                return $color;
+            }
+        }
+        return '#1177d1';
+    }
+
+    /**
+     * Pick a sensible text colour from the Bootstrap utility classes applied
+     * to a badge.
+     */
+    private function resolve_bootstrap_text_color(string $classes): string
+    {
+        if (preg_match('#\btext-(light|white)\b#', $classes)) {
+            return '#ffffff';
+        }
+        if (preg_match('#\btext-dark\b#', $classes)) {
+            return '#1a1a1a';
+        }
+        if (preg_match('#\bbg-(light|warning)\b#', $classes)) {
+            return '#1a1a1a';
+        }
+        return '#ffffff';
     }
 
     /**

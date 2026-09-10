@@ -69,38 +69,21 @@ if (!empty($asyncsingle)) {
     redirect($redirecturl, get_string('exportqueued', 'quiz_export'), null, \core\output\notification::NOTIFY_SUCCESS);
 } else {
     // Synchronous export (original behaviour).
-    raise_memory_limit(MEMORY_HUGE);
-    $timelimit = get_config('quiz_export', 'timelimit');
-    set_time_limit($timelimit !== false ? (int) $timelimit : 600);
+    $service = new \quiz_export\export_service();
+    $storedfile = $service->export_single($attemptid, $exportoptions, $USER->id, $attemptobj->get_cmid());
 
+    // Compose a human-friendly display filename (spaces) distinct from the
+    // stored filename (underscores) used in the export history.
     $exporter = new quiz_export_engine();
-    $pdf_file = $exporter->a2pdf($attemptobj, $exportoptions);
-
     $info = $exporter->get_additionnal_informations($attemptobj);
-    $filename = $info['firstname'] . '_' . $info['lastname'] . '.pdf';
-
-    // Store the file via File API so it appears in export history.
-    $context = \context_module::instance($attemptobj->get_cmid());
-    $fs = get_file_storage();
-    $filerecord = [
-        'contextid' => $context->id,
-        'component' => 'quiz_export',
-        'filearea' => 'export',
-        'itemid' => time(),
-        'filepath' => '/',
-        'filename' => $filename,
-        'userid' => $USER->id,
-    ];
-    $fs->create_file_from_pathname($filerecord, $pdf_file);
-
-    header("Content-Type: application/pdf");
     $displayfilename = $info['firstname'] . ' ' . $info['lastname'] . '.pdf';
+
+    header('Content-Type: application/pdf');
     if ($inline) {
-        header("Content-Disposition: inline; filename=\"" . $displayfilename . "\"");
+        header('Content-Disposition: inline; filename="' . $displayfilename . '"');
     } else {
-        header("Content-Disposition: attachment; filename=\"" . $displayfilename . "\"");
+        header('Content-Disposition: attachment; filename="' . $displayfilename . '"');
     }
 
-    readfile($pdf_file);
-    unlink($pdf_file);
+    $storedfile->readfile();
 }

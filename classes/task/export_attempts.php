@@ -16,16 +16,11 @@
 
 namespace quiz_export\task;
 
-use mod_quiz\quiz_attempt;
+use quiz_export\export_service;
 use quiz_export\notification_helper;
+use quiz_export\pdf_options;
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
-require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
-require_once($CFG->dirroot . '/mod/quiz/report/export/classes/task/export_task_base.php');
 
 /**
  * Adhoc task to export multiple quiz attempts as a ZIP file asynchronously.
@@ -58,66 +53,25 @@ class export_attempts extends export_task_base {
      * - cmid (int): The course module ID for the quiz.
      */
     protected function execute_export(): void {
-        global $CFG, $DB;
-
         $data = $this->get_custom_data();
-        $attemptids = $data->attemptids;
-        $exportoptions = \quiz_export\pdf_options::from_data($data);
-        $userid = $data->userid;
-        $cmid = $data->cmid;
 
-        $exporter = new \quiz_export_engine();
-        $pdffiles = [];
+        $service = new export_service();
+        $storedfile = $service->export_bulk(
+            (array) $data->attemptids,
+            pdf_options::from_data($data),
+            (int) $data->userid,
+            (int) $data->cmid
+        );
 
-        $tmpdir = sys_get_temp_dir();
-        $tmpfile = tempnam($tmpdir, 'mdl-qexp_');
-        $tmpzipfile = $tmpfile . '.zip';
-        rename($tmpfile, $tmpzipfile);
-        chmod($tmpzipfile, 0644);
-
-        $zip = new \ZipArchive();
-        $zip->open($tmpzipfile, \ZipArchive::OVERWRITE);
-
-        foreach ($attemptids as $attemptid) {
-            $attemptobj = quiz_attempt::create($attemptid);
-            $attemptobj->preload_all_attempt_step_users();
-            $pdffile = $exporter->a2pdf($attemptobj, $exportoptions);
-            $pdffiles[] = $pdffile;
-            $student = $DB->get_record('user', ['id' => $attemptobj->get_userid()]);
-            $zip->addFile($pdffile, fullname($student, true) . '_' . $attemptid . '.pdf');
-        }
-        $zip->close();
-
-        $filename = 'quiz_export_' . date('Ymd_His') . '.zip';
-
-        // Store the ZIP file via File API.
-        $context = \context_module::instance($cmid);
-        $fs = get_file_storage();
-
-        $filerecord = [
-            'contextid' => $context->id,
-            'component' => 'quiz_export',
-            'filearea' => 'export',
-            'itemid' => time(),
-            'filepath' => '/',
-            'filename' => $filename,
-            'userid' => $userid,
-        ];
-
-        $storedfile = $fs->create_file_from_pathname($filerecord, $tmpzipfile);
-
-        // Cleanup temporary files.
-        foreach ($pdffiles as $pdffile) {
-            unlink($pdffile);
-        }
-        unlink($tmpzipfile);
-
-        // Build report URL and send notification.
         $reporturl = new \moodle_url('/mod/quiz/report.php', [
-            'id' => $cmid,
+            'id' => $data->cmid,
             'mode' => 'export',
         ]);
 
-        notification_helper::send_export_complete($userid, $filename, $reporturl->out(false));
+        notification_helper::send_export_complete(
+            (int) $data->userid,
+            $storedfile->get_filename(),
+            $reporturl->out(false)
+        );
     }
 }
