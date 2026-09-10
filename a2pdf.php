@@ -35,6 +35,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/export/export.php');
 
 $attemptid = required_param('attempt', PARAM_INT);
 $inline = optional_param('inline', 0, PARAM_INT);
+$returnurl = optional_param('returnurl', '', PARAM_LOCALURL);
 $exportoptions = \quiz_export\pdf_options::from_params();
 
 // Get attempt object
@@ -63,8 +64,9 @@ if (!empty($asyncsingle)) {
     $task->set_userid($USER->id);
     \core\task\manager::queue_adhoc_task($task);
 
-    $quizurl = new moodle_url('/mod/quiz/view.php', ['id' => $attemptobj->get_cmid()]);
-    redirect($quizurl, get_string('exportqueued', 'quiz_export'), null, \core\output\notification::NOTIFY_SUCCESS);
+    $redirecturl = $returnurl !== '' ? new moodle_url($returnurl)
+        : new moodle_url('/mod/quiz/report.php', ['id' => $attemptobj->get_cmid(), 'mode' => 'export']);
+    redirect($redirecturl, get_string('exportqueued', 'quiz_export'), null, \core\output\notification::NOTIFY_SUCCESS);
 } else {
     // Synchronous export (original behaviour).
     raise_memory_limit(MEMORY_HUGE);

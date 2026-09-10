@@ -6,8 +6,8 @@ body, html, * {
     font-size: 13px !important;
 }
 
-/* Hide elements that are not relevant in a pdf */
-.comment,
+/* Hide elements that are not relevant in a pdf, the manual comment itself must stay visible */
+.commentlink,
 .editquestion,
 .submitbtns,
 .sr-only.sr-only-focusable,
@@ -1342,7 +1342,8 @@ textarea.form-control {
 }
 
 .que .formulation,
-.que .outcome {
+.que .outcome,
+.que .comment {
     position: relative;
     padding: .75rem 1.25rem;
     margin-bottom: 1rem;
@@ -1359,6 +1360,12 @@ textarea.form-control {
     color: #7d5a29;
     background-color: #fcefdc;
     border-color: #fbe8cd;
+}
+
+.que .comment {
+    color: #20491e;
+    background-color: #d7e4d6;
+    border: 1px solid #c2d7c2;
 }
 
 .media {

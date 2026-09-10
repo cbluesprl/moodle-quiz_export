@@ -67,13 +67,28 @@ class quiz_export_table extends attempts_report_table
         }
 
         $urlparams = array_merge(
-            array('attempt' => $attempt->attempt, 'inline' => 1),
+            array('attempt' => $attempt->attempt, 'inline' => 1, 'returnurl' => $this->get_return_url()),
             \quiz_export\pdf_options::from_data($this->options)->to_array()
         );
 
         return $html . html_writer::empty_tag('br') . html_writer::link(
                 new moodle_url('/mod/quiz/report/export/a2pdf.php', $urlparams),
                 get_string('exportattempt', 'quiz_export'), array('class' => 'reviewlink'));
+    }
+
+    /**
+     * Returns the report page to come back to once a single attempt has been exported.
+     *
+     * @return string The page currently displayed, as a URL local to the wwwroot.
+     */
+    protected function get_return_url()
+    {
+        global $PAGE;
+
+        $currenturl = qualified_me();
+
+        return $currenturl === false ? $PAGE->url->out_as_local_url(false)
+            : (new moodle_url($currenturl))->out_as_local_url(false);
     }
 
     protected function submit_buttons()

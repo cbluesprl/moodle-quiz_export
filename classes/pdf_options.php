@@ -105,10 +105,13 @@ class pdf_options {
     }
 
     /**
+     * Applies the options to the review rendering, dropping the grading link which cannot be followed from a PDF.
+     *
      * @param question_display_options $displayoptions The display options of the attempt being exported.
      * @return void
      */
     public function apply(question_display_options $displayoptions): void {
+        $displayoptions->manualcommentlink = null;
         if ($this->hidegeneralfeedback) {
             $displayoptions->generalfeedback = question_display_options::HIDDEN;
         }
